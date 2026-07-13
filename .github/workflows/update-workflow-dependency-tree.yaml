@@ -1,0 +1,46 @@
+name: Update Workflow Dependency Tree
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/*.yaml
+      - .github/workflows/*.yml
+      - scripts/update_workflow_dependency_tree.py
+    paths-ignore:
+      - .github/workflows/DEPENDENCY_TREE.md
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh-dependency-tree:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyyaml
+
+      - name: Generate dependency tree artifact
+        run: |
+          python scripts/update_workflow_dependency_tree.py
+
+      - name: Create pull request if dependency tree changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bot/update-workflow-dependency-tree
+          title: "docs: refresh workflow dependency tree"
+          commit-message: "docs: refresh workflow dependency tree"
+          body: |
+            Automated refresh of .github/workflows/DEPENDENCY_TREE.md.
+          add-paths: |
+            .github/workflows/DEPENDENCY_TREE.md
