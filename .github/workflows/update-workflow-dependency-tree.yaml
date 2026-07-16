@@ -7,8 +7,6 @@ on:
       - .github/workflows/*.yaml
       - .github/workflows/*.yml
       - scripts/update_workflow_dependency_tree.py
-    paths-ignore:
-      - .github/workflows/DEPENDENCY_TREE.md
 
 permissions:
   contents: write
