@@ -4,7 +4,7 @@ This file is manually maintained and is not modified by automation.
 
 ## build-hpc-development-image.yaml
 
-- Purpose: Reusable workflow that builds, tests, and optionally publishes a single HPC development image variant.
+- Purpose: Reusable workflow that builds, tests, and **optionally publishes** a single HPC development image variant.
 - Triggers: `workflow_call` from other workflows.
 - Key jobs:
   - `build-image`: Build image layers, run image tests, and publish deployment image/tags when enabled.
