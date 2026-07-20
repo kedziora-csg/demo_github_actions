@@ -1,0 +1,360 @@
+name: Build, Test, and Deploy a HPC Development Image
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: "Base OS"
+        required: false
+        type: string
+        default: almalinux9
+
+      arch:
+        description: "CPU Architecture"
+        required: false
+        type: string
+        default: "x86_64"
+
+      runner:
+        description: "GitHub Runner Type"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+
+      free_runner_space:
+        description: "Remove unneeded software on runner host to free up disk space"
+        type: boolean
+        required: false
+        default: false
+
+      buildx_driver:
+        description: "Docker setup-buildx-action driver type"
+        required: false
+        type: string
+        default: "docker-container"
+
+      buildx_endpoint:
+        description: "Docker setup-buildx-action endpoint"
+        required: false
+        type: string
+        default: ""
+
+      buildx_cloud:
+        description: "Docker buildx-action - use buildcloud"
+        required: false
+        type: boolean
+        default: false
+
+      conda:
+        description: "Include Conda (Miniforge)"
+        type: boolean
+        required: false
+        default: true
+
+      compiler:
+        description: "Compiler"
+        type: string
+        required: false
+        default: "os-gcc"
+
+      compiler_build_args:
+        description: "Compiler Docker BUILD_ARGS"
+        type: string
+        required: false
+
+      mpi:
+        description: "MPI"
+        type: string
+        required: false
+        default: "openmpi"
+
+      mpi_build_args:
+        description: "MPI Docker BUILD_ARGS"
+        type: string
+        required: false
+
+      gpu:
+        description: "GPU / Accelerator framework"
+        type: string
+        required: false
+        default: "nogpu"
+
+      gpu_build_args:
+        description: "GPU Docker BUILD_ARGS"
+        type: string
+        required: false
+
+      docker_repo:
+        description: "Docker Repository for Deployment"
+        type: string
+        required: false
+        default: "ncarcisl/hpcdev"
+
+      extra_build_args:
+        description: "Miscellaneous Docker BUILD_ARGS"
+        type: string
+        required: false
+
+      test:
+        description: "Test Image"
+        type: boolean
+        required: false
+        default: false
+
+      publish:
+        description: "Publish Image"
+        type: boolean
+        required: false
+        default: false
+
+    secrets:
+      dockerhub_token:
+        required: true
+
+jobs:
+  build-image:
+    name: Build, Test, & Publish ${{inputs.os }}
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - name: Check out Repository
+        uses: actions/checkout@v5
+        with:
+          submodules: "true"
+          fetch-depth: 0
+
+      - name: Free Disk Space on Runner
+        if: ${{ inputs.free_runner_space }}
+        uses: ./.github/actions/slim-action-runner
+
+      - name: Create host bind mounts & containers/devenv/extras
+        run: |
+          which make 2>/dev/null || { sudo apt-get update && sudo apt-get install make; }
+          cd containers/devenv
+          make extras
+          mkdir -p $(pwd)/workspace
+          if [[ -d /mnt/my_temp_worspace ]]; then
+            sudo mount --bind /mnt/my_temp_worspace $(pwd)/workspace
+          fi
+          BLOCKSIZE="GiB" df -h / $(pwd)/workspace
+
+      - name: Interrogate Runner
+        run: |
+          cat /etc/os-release
+          uptime
+          uname -a
+          df -h
+          free
+          lscpu
+          which nvidia-smi 2>/dev/null && nvidia-smi 2>/dev/null || echo "nvidia-smi not found."
+
+      - name: Login to Docker
+        uses: docker/login-action@v4
+        with:
+          username: benjaminkirk
+          password: ${{ secrets.dockerhub_token }}
+
+      - name: Set up Docker BuildX (local)
+        if: ${{ inputs.buildx_endpoint == '' && inputs.buildx_cloud == false }}
+        uses: docker/setup-buildx-action@v4
+        with:
+          platforms: ${{ inputs.arch == 'x86_64' && 'linux/amd64' || 'linux/arm64' }}
+
+      - name: Set up Docker BuildX (remote)
+        if: ${{ inputs.buildx_endpoint != '' && inputs.buildx_cloud == false }}
+        uses: docker/setup-buildx-action@v4
+        with:
+          platforms: ${{ inputs.arch == 'x86_64' && 'linux/amd64' || 'linux/arm64' }}
+          driver: ${{ inputs.buildx_driver }}
+          endpoint: ${{ inputs.buildx_endpoint }}
+
+      - name: Set up Docker BuildX (cloud)
+        if: ${{ inputs.buildx_cloud }}
+        uses: docker/setup-buildx-action@v4
+        with:
+          platforms: ${{ inputs.arch == 'x86_64' && 'linux/amd64' || 'linux/arm64' }}
+          driver: cloud
+          endpoint: "ncarcisl/benkirk"
+          install: true
+
+      - name: Query Docker Environment
+        run: |
+          which docker
+          docker --version
+          docker buildx ls
+          docker buildx inspect
+          docker buildx du
+
+      #----------------------------------------------
+      # Build image
+      #----------------------------------------------
+      - name: Set Image Build Environment & Tag Variables
+        run: |
+          COMPILER_LABEL="-${{ inputs.compiler == 'os-gcc' && 'gcc' || inputs.compiler }}"
+          GPU_LABEL="-${{ inputs.gpu }}"
+          MPI_LABEL="-${{ inputs.mpi }}"
+
+          cat << EOF > build_inputs.txt
+          arch: '${{ inputs.arch }}'
+          os: '${{ inputs.os }}'
+          compiler: '${{ inputs.compiler }}'
+          ${{ inputs.compiler_build_args }}
+          mpi: '${{ inputs.mpi }}'
+          ${{ inputs.mpi_build_args }}
+          gpu: '${{ inputs.gpu }}'
+          ${{ inputs.gpu_build_args }}
+          ${{ inputs.extra_build_args }}
+          EOF
+
+          sed -i '/^[[:space:]]*$/d' build_inputs.txt
+          echo && echo "Build Inputs:" && cat build_inputs.txt
+          shasum build_inputs.txt > inputs_sha.txt
+          cat inputs_sha.txt
+          INPUTS_SHA=$(cat inputs_sha.txt | cut -c1-7)
+          if [[ "${{ inputs.gpu }}" == "nogpu" ]]; then
+              GPU_LABEL=
+          fi
+
+          PUBLISH_REPO=${{ inputs.docker_repo }}-${{ inputs.arch }}
+          PUBLISH_TAG=${PUBLISH_REPO}:${{ inputs.os }}${COMPILER_LABEL}${MPI_LABEL}${GPU_LABEL}-latest
+          PUBLISH_TAG_YYMM=${PUBLISH_TAG//-latest/-$(date +%y.%m)}
+          #PUBLISH_TAG_YYMM=${PUBLISH_TAG//-latest/-25.09}
+          CI_REPO=${PUBLISH_REPO}-cache
+          CI_TAG=${CI_REPO}:${{ inputs.os }}${COMPILER_LABEL}${MPI_LABEL}${GPU_LABEL}-${INPUTS_SHA}
+          CI_CACHE=${CI_TAG//-${INPUTS_SHA}/-cache}
+
+          cat << EOF > tags.sh
+          CI_REPO=${CI_REPO}
+          CI_TAG=${CI_TAG}
+          CI_CACHE=${CI_CACHE}
+          PUBLISH_REPO=${PUBLISH_REPO}
+          PUBLISH_TAG=${PUBLISH_TAG}
+          PUBLISH_TAG_YYMM=${PUBLISH_TAG_YYMM}
+          EOF
+
+          cat tags.sh
+          cat tags.sh >> ${GITHUB_ENV}
+          cat tags.sh >> ${GITHUB_OUTPUT}
+
+      - name: Extract Docker image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.CI_REPO }}
+
+      - name: BaseOS + Toolkits + Compiler + MPI Image
+        uses: docker/build-push-action@v7
+        with:
+          push: true
+          load: false
+          tags: ${{ env.CI_TAG }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: mode=max
+          sbom: false
+          cache-from: type=registry,ref=${{env.CI_CACHE }}
+          cache-to: type=registry,ref=${{ env.CI_CACHE }},mode=max
+          context: containers/devenv
+          file: containers/devenv/Dockerfile
+          target: final
+          build-args: |
+            BASE_OS=${{ inputs.os }}
+            FINAL_TARGET=fftlibs
+            MINIFORGE_PREREQ=${{ inputs.gpu == 'cuda' && 'cuda' || 'base_os' }}
+            ${{ inputs.extra_build_args }}
+            ${{ inputs.gpu_build_args }}
+            ${{ inputs.compiler_build_args }}
+            ${{ inputs.mpi_build_args }}
+
+      - name: Done Build - Clean Up
+        uses: ./.github/actions/docker-cleanup
+
+      #----------------------------------------------
+      # Test image
+      #----------------------------------------------
+      # ref https://docs.docker.com/build/ci/github-actions/test-before-push/
+      - name: Test Image - Environment Variables
+        if: ${{ inputs.test }}
+        run: |
+          cat << EOF > test_env.cfg
+          OMPI_MCA_opal_cuda_support=false
+          MPIR_CVAR_ENABLE_GPU=0
+          EOF
+
+          echo "setting runtime-disable GPU-Aware MPI env vars for both OpenMPI and MPICH..."
+          cat test_env.cfg
+
+      - name: Test Image - Pull
+        if: ${{ inputs.test }}
+        run: |
+          docker run --rm --env-file test_env.cfg \
+            ${{ env.CI_TAG }} \
+            cat /container/config_env.sh
+
+      - name: Test Image - OSU
+        if: ${{ inputs.test }}
+        run: |
+          docker run --rm --env-file test_env.cfg \
+            --env OMB_VERSION=7.5.1 \
+            ${{ env.CI_TAG }} \
+            /container/extras/build_osu-micro-benchmarks.sh
+
+      - name: Test Image - Dart
+        if: ${{ inputs.test }}
+        continue-on-error: ${{ inputs.compiler == 'clang' }}
+        run: |
+          docker run --rm --env-file test_env.cfg \
+            --env DART_VERSION=v11.12.1 \
+            ${{ env.CI_TAG }} \
+            /container/extras/build_dart.sh
+
+      - name: Test Image - Kokkos
+        if: ${{ inputs.test }}
+        continue-on-error: ${{ inputs.gpu == 'nogpu' && false || true }}
+        run: |
+          docker run --rm --env-file test_env.cfg \
+            --env KOKKOS_VERSION=4.6.02 \
+            ${{ env.CI_TAG }} \
+            /container/extras/build_kokkos.sh
+
+      - name: Done Testing - Clean Up
+        uses: ./.github/actions/docker-cleanup
+
+      #----------------------------------------------
+      # Publish image
+      #----------------------------------------------
+      - name: Publish Image
+        if: ${{ inputs.publish && inputs.test }}
+        uses: docker/build-push-action@v7
+        env:
+          DOCKER_BUILD_SUMMARY: false
+        with:
+          push: true
+          load: false
+          tags: ${{ env.PUBLISH_TAG }},${{ env.PUBLISH_TAG_YYMM }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=registry,ref=${{env.CI_CACHE }}
+          context: containers/publish
+          file: containers/publish/Dockerfile
+          build-args: |
+            BASE_IMAGE=${{ env.CI_TAG }}
+            DEPLOYMENT_SCRIPTS=/container/extras/build_osu-micro-benchmarks.sh
+          target: final
+
+      # - name: Run Published Image
+      #   if: ${{ inputs.publish && inputs.test }}
+      #   run: |
+      #     docker run --rm \
+      #       ${{ env.PUBLISH_TAG }} \
+      #       mpicc --version
+
+      - name: Done Publish - Clean Up
+        uses: ./.github/actions/docker-cleanup
+
+    outputs:
+      CI_REPO: ${{ steps.tags.outputs.CI_REPO }}
+      CI_TAG: ${{ steps.tags.outputs.CI_TAG }}
+      CI_CACHE: ${{ steps.tags.outputs.CI_CACHE }}
+      PUBLISH_REPO: ${{ steps.tags.outputs.PUBLISH_REPO }}
+      PUBLISH_TAG: ${{ steps.tags.outputs.PUBLISH_TAG }}
