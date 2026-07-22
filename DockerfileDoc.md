@@ -272,51 +272,6 @@ ENTRYPOINT ["/bin/bash", "--rcfile", "/container/config_env.sh", "--login", "-c"
 
 This causes Bash to use `/container/config_env.sh` when the container starts.
 
-## Dependency Flow Chart
-
-```mermaid
-flowchart TD
-    A["BASE_OS<br/>Selected Linux distribution"] --> B["base_os<br/>Common OS packages and helper scripts"]
-
-    B --> C1["cuda<br/>Optional CUDA runtime"]
-    B --> C2["rocm<br/>Optional ROCm runtime"]
-    B --> C3["no GPU<br/>Continue from base_os"]
-
-    C1 --> D["miniforge<br/>Python/Conda environment"]
-    C2 --> D
-    C3 --> D
-
-    D --> E["toolkits<br/>General development tools"]
-
-    E --> F1["os-gcc<br/>Distribution GCC"]
-    E --> F2["gcc<br/>Source-built GCC"]
-    E --> F3["oneapi<br/>Intel oneAPI"]
-    E --> F4["aocc<br/>AMD AOCC"]
-    E --> F5["nvhpc<br/>NVIDIA HPC SDK"]
-    E --> F6["clang<br/>LLVM/Clang"]
-
-    F1 --> G["compilers<br/>Selected by COMPILER_FAMILY"]
-    F2 --> G
-    F3 --> G
-    F4 --> G
-    F5 --> G
-    F6 --> G
-
-    G --> H1["openmpi<br/>Open MPI"]
-    G --> H2["mpich<br/>MPICH 5.x"]
-    G --> H3["mpich3<br/>MPICH 3.x"]
-
-    H1 --> I["mpi<br/>Selected by MPI_FAMILY"]
-    H2 --> I
-    H3 --> I
-
-    I --> J["iolibs<br/>HDF5, NetCDF, related serial I/O libraries"]
-    J --> K["mpi-iolibs<br/>PnetCDF, ParallelIO, MPI-enabled I/O"]
-    K --> L["fftlibs<br/>FFTW, HeFFTe"]
-
-    L --> M["final<br/>Final exported image"]
-```
-
 ## Simplified Build Argument Flow
 
 ```mermaid
