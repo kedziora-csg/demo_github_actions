@@ -131,63 +131,7 @@ Docker build arguments determine how the multi-stage graph is assembled. Represe
 
 The `BASE_OS` argument selects the Linux distribution or vendor-provided base image. Representative values include AlmaLinux, Rocky Linux, openSUSE Leap, openSUSE Tumbleweed, Ubuntu Jammy, and Ubuntu Noble variants, with additional CUDA or ROCm variants where applicable.
 
-Choosing the right base image for your CI/CD pipelines dictates your build speed, security posture, and how closely your testing environment mirrors production. The six distributions you mentioned fall into three distinct families, each optimizing for a different point on the stability-versus-freshness spectrum.
-
-The Enterprise Linux Derivatives
-
-When your production environment runs Red Hat Enterprise Linux (RHEL), using a RHEL-compatible distribution for your containers ensures your CI/CD pipeline tests exactly what will be deployed.
-
-AlmaLinux
-
-AlmaLinux is a community-owned enterprise operating system governed by a non-profit foundation. Following Red Hat's source code availability changes in 2023, AlmaLinux shifted its focus to maintaining Application Binary Interface (ABI) compatibility with RHEL, pulling sources from CentOS Stream and RHEL to ensure software runs identically.
-
-* Advantages: Extreme stability and a 10-year support lifecycle. It is highly reliable for mirroring enterprise production environments without incurring licensing costs.
-* Disadvantages: It prioritizes stability over freshness. You will not have access to the latest compilers or language runtimes out of the box without enabling modular or third-party repositories. Base images also tend to be larger than minimal Alpine or Debian images.
-
-Rocky Linux
-
-Rocky Linux is another free enterprise operating system, founded by the original creator of CentOS. Unlike AlmaLinux, Rocky Linux continues to target 1:1 bug-for-bug compatibility with RHEL.
-
-* Advantages: It shares the exact same technical benefits as AlmaLinux — enterprise-grade stability, long lifecycles, and a behavior profile identical to RHEL.
-* Disadvantages: The technical drawbacks are identical to AlmaLinux (older toolchains, larger footprint). The primary difference is organizational: Rocky Linux is backed by a B-Corp (the Rocky Enterprise Software Foundation) rather than a non-profit foundation.
-
-The SUSE Ecosystem
-
-The openSUSE family is deeply integrated into European enterprise environments and offers robust package management through Zypper.
-
-openSUSE Leap
-
-Leap is a regular point-release distribution built from the exact same binary packages as SUSE Linux Enterprise (SLE).
-
-* Advantages: Excellent predictability and enterprise-grade stability. It strikes a balance between stability and updated software, making it highly reliable for pipelines deploying to SUSE-heavy infrastructure.
-* Disadvantages: The openSUSE container ecosystem is smaller than those of RHEL and Ubuntu. You may find fewer pre-built third-party Docker layers and community troubleshooting guides.
-
-openSUSE Tumbleweed
-
-Tumbleweed is a rolling-release distribution, meaning it continuously updates packages to the latest stable versions rather than relying on massive point-release upgrades.
-
-* Advantages: It provides immediate access to the absolute newest kernels, compilers, and language versions. It is highly valuable in CI/CD when you need to test your application against upcoming software updates to catch breaking changes early.
-* Disadvantages: A rolling release is a double-edged sword in automation. If you do not strictly pin your dependencies, an upstream package update can unexpectedly break a previously functioning CI/CD pipeline.
-
-The Ubuntu LTS Series
-
-Ubuntu Long Term Support (LTS) releases are the default standard for many cloud-native applications due to their massive community and broad compatibility.
-
-Ubuntu Jammy (22.04 LTS)
-
-Released in 2022, Jammy Jellyfish is an established, widely adopted LTS release.
-
-* Advantages: Universal compatibility. Almost every third-party vendor builds and tests for Ubuntu 22.04 first. The ecosystem is massive, making troubleshooting and finding optimized base layers effortless.
-* Disadvantages: Because the core packages are locked to their 2022 versions, developers relying on newer language features (like recent Python or GCC updates) often have to build them from source or pull from external repositories.
-
-Ubuntu Noble (24.04 LTS)
-
-Released in 2024, Noble Numbat is Canonical's current LTS standard.
-
-* Advantages: It updates the entire software stack to modern standards, providing newer default toolchains, security features, and language runtimes out of the box, while still guaranteeing 5 years of standard support.
-* Disadvantages: Being newer, some legacy proprietary software or older CI/CD build scripts may still expect the Jammy environment and might require slight modifications to run smoothly.
-
-### Comparison Summary
+## Base OS Comparison Summary
 
 Choosing the right base image for your CI/CD pipelines dictates your build speed, security posture, and how closely your testing environment mirrors production. The six distributions you mentioned fall into three distinct families, each optimizing for a different point on the stability-versus-freshness spectrum.
 
