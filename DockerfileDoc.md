@@ -322,12 +322,24 @@ flowchart TD
 ```mermaid
 flowchart LR
     A["GitHub Actions matrix"] --> B["Reusable workflow inputs"]
-    B --> C["docker/build-push-action<br/>build-args"]
-    C --> D["Dockerfile ARG values"]
-    D --> E["Stage selection"]
-    E --> F["Compiled HPC software stack"]
-    F --> G["/container/config_env.sh"]
-    G --> H["Final runtime environment"]
+    B --> C["docker/build-push-action<br/>build-args"] --> Cnext[" "]
+
+    classDef continuation fill:transparent,stroke:transparent,color:transparent;
+    class Cnext continuation;
+```
+
+```mermaid
+flowchart LR
+    D["Dockerfile ARG values"] --> E["Stage selection"]
+    E --> F["Compiled HPC software stack"] --> Fnext[" "]
+
+    classDef continuation fill:transparent,stroke:transparent,color:transparent;
+    class Fnext continuation;
+```
+
+```mermaid
+flowchart LR
+    G["/container/config_env.sh"] --> H["Final runtime environment"]
 ```
 
 ## Environment Configuration Model

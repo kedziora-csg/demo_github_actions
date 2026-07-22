@@ -8,6 +8,8 @@ The images are intended to provide reproducible development and testing environm
 
 Although the repository name suggests a GitHub Actions demonstration, the core implementation is the container build system under `containers/devenv` and the GitHub Actions workflows that generate and execute the build matrix.
 
+The design relies on a parameterized multi-stage Dockerfile, centralized environment configuration, source-built scientific libraries, and GitHub Actions workflows that expand and validate many compiler, MPI, GPU, architecture, and operating-system combinations. This multiple container approach is useful for maintaining stable builds of HPC software on modern HPC systems, and the representative workflow starts with `matrix-build-images.yaml`. For use as a standin for testing on a particular type of system with containerized runners, use the `dial-an-image.yaml` workflow with parameterization corresponding to the target system.
+
 ## Image Composition
 
 Each development image represents a selected combination of several major dimensions:
@@ -47,13 +49,13 @@ prepares the Docker build context by copying the contents of `scripts/` into the
 
 ### Supporting Containers
 
-Several smaller container definitions are located beneath `containers/`:
+Several smaller container definitions are located beneath `containers/`. Each is built from a caller-supplied `BASE_IMAGE`, so these images are secondary consumers of the main development image rather than independent base images:
 
-- `containers/demo/` provides a downstream demonstration image.
-- `containers/test/` provides test-runner images, including support for smoke tests and benchmark execution.
-- `containers/publish/` provides the final publish and software bill of materials (SBOM) stage.
+- `containers/demo/` builds a demonstration application image on top of a development image.
+- `containers/test/` builds test-runner images on top of a development image, including support for smoke tests and benchmark execution.
+- `containers/publish/` builds the production image on top of the CI-built development image and can run deployment scripts before publication.
 
-These containers are downstream consumers of the main development image and support validation, demonstration, or publication workflows.
+The publish step in the GitHub Actions (GHA) workflow attaches Software Bill of Materials metadata by setting `sbom: true` on the Docker build action, enabling downstream vulnerability, license, and supply-chain analysis. The `containers/publish/Dockerfile` itself only defines the final image build steps.
 
 ### HPC Deployment Configuration
 
@@ -89,6 +91,8 @@ The `.github/workflows/` directory contains the automation that drives image con
 - `dial-an-image.yaml`
 - `matrix-smoketest-applications.yaml`
 
+These will be discussed below.
+
 The `.github/actions/` directory also contains composite actions used by the workflows. In particular, `slim-action-runner` and `docker-cleanup` help manage limited disk space on GitHub-hosted runners.
 
 ## Dockerfile Architecture
@@ -120,6 +124,7 @@ The major logical layers are:
 
 This design allows a single Dockerfile to produce many variants without duplicating large sections of build logic.
 
+
 ## Build Argument Selection
 
 Docker build arguments determine how the multi-stage graph is assembled. Representative selector arguments include:
@@ -135,9 +140,54 @@ Docker build arguments determine how the multi-stage graph is assembled. Represe
 
 The `BASE_OS` argument selects the Linux distribution or vendor-provided base image. Representative values include AlmaLinux, Rocky Linux, openSUSE Leap, openSUSE Tumbleweed, Ubuntu Jammy, and Ubuntu Noble variants, with additional CUDA or ROCm variants where applicable.
 
+## Dependency Flow Chart
+
+```mermaid
+flowchart TD
+    A["BASE_OS<br/>Selected Linux distribution"] --> B["base_os<br/>Common OS packages and helper scripts"]
+
+    B --> C1["cuda<br/>Optional CUDA runtime"]
+    B --> C2["rocm<br/>Optional ROCm runtime"]
+    B --> C3["no GPU<br/>Continue from base_os"]
+
+    C1 --> D["miniforge<br/>Python/Conda environment"]
+    C2 --> D
+    C3 --> D
+
+    D --> E["toolkits<br/>General development tools"]
+
+    E --> F1["os-gcc<br/>Distribution GCC"]
+    E --> F2["gcc<br/>Source-built GCC"]
+    E --> F3["oneapi<br/>Intel oneAPI"]
+    E --> F4["aocc<br/>AMD AOCC"]
+    E --> F5["nvhpc<br/>NVIDIA HPC SDK"]
+    E --> F6["clang<br/>LLVM/Clang"]
+
+    F1 --> G["compilers<br/>Selected by COMPILER_FAMILY"]
+    F2 --> G
+    F3 --> G
+    F4 --> G
+    F5 --> G
+    F6 --> G
+
+    G --> H1["openmpi<br/>Open MPI"]
+    G --> H2["mpich<br/>MPICH 5.x"]
+    G --> H3["mpich3<br/>MPICH 3.x"]
+
+    H1 --> I["mpi<br/>Selected by MPI_FAMILY"]
+    H2 --> I
+    H3 --> I
+
+    I --> J["iolibs<br/>HDF5, NetCDF, related serial I/O libraries"]
+    J --> K["mpi-iolibs<br/>PnetCDF, ParallelIO, MPI-enabled I/O"]
+    K --> L["fftlibs<br/>FFTW, HeFFTe"]
+
+    L --> M["final<br/>Final exported image"]
+```
+
 ## Base OS Comparison Summary
 
-Choosing the right base image for your CI/CD pipelines dictates your build speed, security posture, and how closely your testing environment mirrors production. The six distributions you mentioned fall into three distinct families, each optimizing for a different point on the stability-versus-freshness spectrum.
+Choosing the right base image for your CI/CD pipelines dictates your build speed, security posture, and how closely your testing environment mirrors production. The six distributions used here fall into three distinct families, each optimizing for a different point on the stability-versus-freshness spectrum.
 
 ## The Enterprise Linux Derivatives
 
@@ -207,7 +257,6 @@ Released in 2024, Noble Numbat is Canonical's current LTS standard.
 | **Ubuntu Noble** | Point Release (2024 LTS) | Modern cloud-native development with long-term stability. |
 
 
-
 The `COMPILER_FAMILY` argument selects the compiler layer. Supported compiler families include distribution GCC, GCC built from source, Intel oneAPI, AOCC, NVHPC, and Clang.
 
 The `MPI_FAMILY` argument selects the MPI implementation, typically OpenMPI, MPICH 5.x, or MPICH 3.4.x.
@@ -245,7 +294,7 @@ c-blosc        fftw    heffte	      miniforge  osu-micro-benchmarks  szip
 config_env.sh  gcc     init-conda.sh  mpich	 parallelio
 ```
 
-This is provides the added elements for the HPC development tool chain. Examples of applications that can be built based on this tool chain are in the subdirectory `examples`.
+This is provides the added elements for the HPC development tool chain. Examples of applications that can be built based on this tool chain are in the subdirectory `examples`. This is similar to the often used /opt/ directory for optional software for a given operating system implementation. 
 
 ```
 # ls container/extras/
@@ -331,9 +380,9 @@ and looks like
 ncarcisl/hpcdev-x86_64:almalinux9-gcc-openmpi-latest
 ```
 
-The cached image can be used as a layer for the next image for BuildKit to use to add layers, while the published one appears in the Docker Hub for users to pull. That matters for this repository because the Dockerfile builds expensive HPC libraries from source. Without a cache, small changes could force long rebuilds of compilers, MPI, HDF5, NetCDF, FFT libraries, and related toolchain dependencies. The layering is input and output is defined in `cache-from:` and `cache-to:` in the "BaseOS + Toolkits + Compiler + MPI Image" workflow. 
+The cached image can be used as a layer for the next image for BuildKit to use to add layers, while the published one appears in the Docker Hub for users to pull. This matters because the Dockerfile builds expensive HPC libraries from source. Without a cache, small changes could force long rebuilds of compilers, MPI, HDF5, NetCDF, FFT libraries, and related toolchain dependencies. The layering input and output is defined in `cache-from:` and `cache-to:` in the "BaseOS + Toolkits + Compiler + MPI Image" workflow. 
 
-The build-args: block in the workflow becomes Docker/BuildKit --build-arg KEY=VALUE inputs. In the Dockerfile they show up as ARG declarations, for example at the top of the Dockerfile. For a typical almalinux9 + gcc + openmpi + nogpu build, this might effectively become:
+The build-args: block in the workflow becomes Docker/BuildKit --build-arg KEY=VALUE inputs in the GHA and some are fed in by the calling workflow, for example matrix-build-images.yaml. In the Dockerfile they show up as ARG declarations, for example at the top of the Dockerfile. For a typical almalinux9 + gcc + openmpi + nogpu build, this might effectively become:
 
 ```
 BASE_OS=almalinux9
@@ -390,7 +439,7 @@ The workflow:
 
 Runs on pull requests that touch the Dockerfile, scripts, or related workflow files. It uses a reduced matrix intended to validate common and important combinations without incurring the full cost of the production matrix.
 
-This workflow is the primary validation path for routine development and version-bump pull requests.
+This workflow is the primary validation path for routine container development and version-bump pull requests.
 
 ### Dial-an-Image Workflow
 
@@ -575,9 +624,5 @@ When maintaining this repository, follow these guidelines:
 8. For CMake projects, prefer CMake cache variables over environment `CFLAGS` when pinning the C standard.
 9. Preserve image-size controls such as shared-only builds, stripped installs, and cleanup steps.
 10. Inspect full CI logs to find the first real compiler or linker error rather than relying only on the final BuildKit summary.
-
-## Summary
-
-This repository implements a matrix-driven CI/CD system for HPC development containers. Its design relies on a parameterized multi-stage Dockerfile, centralized environment configuration, source-built scientific libraries, and GitHub Actions workflows that expand and validate many compiler, MPI, GPU, architecture, and operating-system combinations.
 
 The most important maintenance concerns are matrix correctness, compiler compatibility, image size control, and efficient diagnosis of long-running container build failures.
