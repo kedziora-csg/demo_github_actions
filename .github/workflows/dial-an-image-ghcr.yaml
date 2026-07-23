@@ -1,0 +1,179 @@
+name: Select a HPC Development Container Image to Build, Test, and Deploy (GHCR)
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: "Base OS"
+        type: choice
+        required: true
+        default: almalinux9
+        options:
+          - almalinux8
+          - almalinux9
+          - almalinux10
+          - leap
+          - tumbleweed
+          - noble
+
+      arch:
+        description: "CPU Architecture"
+        type: choice
+        required: true
+        default: x86_64
+        options:
+          - x86_64
+          - aarch64
+
+      conda:
+        description: "Include Conda (Miniforge)"
+        type: boolean
+        required: false
+        default: true
+
+      compiler:
+        description: "Compiler"
+        type: choice
+        required: true
+        default: os-gcc
+        options:
+          - os-gcc
+          - gcc
+          - oneapi
+          - aocc
+          - nvhpc
+          - clang
+
+      cuda:
+        description: "Include CUDA"
+        type: boolean
+        required: false
+        default: false
+
+      mpi:
+        description: "MPI"
+        type: choice
+        required: true
+        default: openmpi
+        options:
+          - openmpi
+          - mpich
+          - mpich3
+
+      test:
+        description: "Test Image"
+        type: boolean
+        required: false
+        default: true
+
+      publish:
+        description: "Publish Image"
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  build-image:
+    name: Build
+    uses: ./.github/workflows/build-hpc-dev-image-ghcr.yaml
+    with:
+      os: ${{ inputs.os }}
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.arch == 'x86_64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+      conda: ${{ inputs.conda }}
+      compiler: ${{ inputs.compiler }}
+      mpi: ${{ inputs.mpi }}
+      test: ${{ inputs.test }}
+      publish: ${{ inputs.publish }}
+      extra_build_args: |
+        BASE_OS=${{ inputs.os }}
+        COMPILER_FAMILY=${{ inputs.compiler }}
+        COMPILERS_PREREQ=${{ inputs.conda && 'miniforge' || inputs.os }}
+        MPI_FAMILY=${{ inputs.mpi }}
+        MPI_PREREQ=${{ inputs.cuda && 'cuda' || 'compilers' }}
+        FINAL_TARGET=fftlibs
+
+    secrets:
+      registry_token: ${{ secrets.GITHUB_TOKEN }}
+
+    #-------------------------------------------------------------------------------
+    # old base -> compiler -> MPI excessivness follows, for reference
+    #-------------------------------------------------------------------------------
+    #   - name: Base OS
+    #     uses: docker/build-push-action@v7
+    #     with:
+    #       push: true
+    #       tags: ${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-${{ inputs.os }}:latest
+    #       cache-from: type=registry,ref=${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-cache-${{ inputs.os }}:buildcache-${{env.INPUTS_SHA }}
+    #       cache-to: type=registry,ref=${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-cache-${{ inputs.os }}:buildcache-${{env.INPUTS_SHA }},mode=max
+    #       context: containers/devenv
+    #       file: containers/devenv/Dockerfile
+    #       build-args: |
+    #         BASE_OS=${{ inputs.os }}
+    #         COMPILER_FAMILY=os-gcc
+    #         COMPILERS_PREREQ=${{ inputs.conda && 'miniforge' || inputs.os }}
+    #         FINAL_TARGET=compilers
+    #       target: final
+
+    #   - name: Additional Compiler - Cache SHA
+    #     run: |
+    #       cat << EOF >> build_inputs.txt
+    #       compiler: '${{ inputs.compiler }}'
+    #       compiler_version: '${{ inputs.compiler_version }}'
+    #       cuda: '${{ inputs.cuda }}'
+    #       EOF
+    #       echo && echo "Build Inputs:" && cat build_inputs.txt
+    #       shasum build_inputs.txt > inputs_sha.txt
+    #       cat inputs_sha.txt
+    #       echo "INPUTS_SHA=$(cat inputs_sha.txt | cut -c1-7)" >> $GITHUB_ENV
+
+    #   - name: Additional Compiler
+    #     if: ${{ inputs.compiler != '<disabled>' }}
+    #     uses: docker/build-push-action@v7
+    #     with:
+    #       push: true
+    #       tags: ${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-${{ inputs.os }}-${{ inputs.compiler }}:latest
+    #       cache-from: type=registry,ref=${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-cache-${{ inputs.os }}:buildcache-${{env.INPUTS_SHA }}
+    #       cache-to: type=registry,ref=${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-cache-${{ inputs.os }}:buildcache-${{env.INPUTS_SHA }},mode=max
+    #       context: containers/devenv
+    #       file: containers/devenv/Dockerfile
+    #       build-args: |
+    #         BASE_OS=${{ inputs.os }}
+    #         COMPILER_FAMILY=${{ inputs.compiler }}
+    #         COMPILERS_PREREQ=${{ inputs.conda && 'miniforge' || inputs.os }}
+    #         GCC_VERSION=${{ inputs.compiler == 'gcc' && inputs.compiler_version || 'none' }}
+    #         FINAL_TARGET=${{ inputs.cuda && 'cuda' || 'compilers' }}
+    #       target: final
+
+    #   - name: Add MPI - Cache SHA
+    #     run: |
+    #       cat << EOF >> build_inputs.txt
+    #       mpi: '${{ inputs.mpi }}'
+    #       mpi_version: '${{ inputs.mpi_version }}'
+    #       EOF
+    #       echo && echo "Build Inputs:" && cat build_inputs.txt
+    #       shasum build_inputs.txt > inputs_sha.txt
+    #       cat inputs_sha.txt
+    #       echo "INPUTS_SHA=$(cat inputs_sha.txt | cut -c1-7)" >> $GITHUB_ENV
+
+    #   - name: Add MPI
+    #     if: ${{ inputs.mpi != '<disabled>' && inputs.compiler != '<disabled>' }}
+    #     uses: docker/build-push-action@v7
+    #     with:
+    #       push: true
+    #       tags: ${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-${{ inputs.os }}-${{ inputs.compiler }}-${{ inputs.mpi }}:latest
+    #       cache-from: type=registry,ref=${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-cache-${{ inputs.os }}:buildcache-${{env.INPUTS_SHA }}
+    #       cache-to: type=registry,ref=${{ secrets.BENKIRK_DOCKERHUB_USERNAME }}/gh-ci-cache-${{ inputs.os }}:buildcache-${{env.INPUTS_SHA }},mode=max
+    #       context: containers/devenv
+    #       file: containers/devenv/Dockerfile
+    #       build-args: |
+    #         BASE_OS=${{ inputs.os }}
+    #         COMPILER_FAMILY=${{ inputs.compiler }}
+    #         COMPILERS_PREREQ=${{ inputs.conda && 'miniforge' || inputs.os }}
+    #         GCC_VERSION=${{ inputs.compiler == 'gcc' && inputs.compiler_version || 'none' }}
+    #         MPI_FAMILY=${{ inputs.mpi }}
+    #         MPI_PREREQ=${{ inputs.cuda && 'cuda' || 'compilers' }}
+    #         MPICH_VERSION=${{ (inputs.mpi == 'mpich' || inputs.mpi == 'mpich3') && inputs.mpi_version || 'none' }}
+    #         OPENMPI_VERSION=${{ inputs.mpi == 'openmpi' && inputs.mpi_version || 'none' }}
+    #         FINAL_TARGET=fftlibs
+    #       target: final

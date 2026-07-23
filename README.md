@@ -339,7 +339,9 @@ For NVHPC updates, the Dockerfile must also be reviewed for CUDA exclusion and r
 
 ## GitHub Actions Workflows
 
-### Reusable Build Workflow
+### Devel - Build HPC Development Images
+
+This is the main build workflow used by other top-level workflows.
 
 The workflow:
 
@@ -348,7 +350,7 @@ The workflow:
 ```
 - Purpose: Reusable workflow that builds, tests, and **optionally publishes** a single HPC development image variant.
 - Triggers: `workflow_call` from other workflows.
-- Key jobs:
+- Key GHA jobs:
   - `build-image`: Build image layers, run image tests, and publish deployment image/tags when enabled.
 
 It is the main workflow for building the HPC containers. It is invoked by other workflows and performs the core Docker image build using `docker/build-push-action`.
@@ -401,9 +403,9 @@ MPI_FAMILY=openmpi
 OPENMPI_VERSION=5.0.10
 ```
 
-### Full Production Matrix
+### Build HPC Development Images
 
-The workflow:
+This drives the building of several Docker images based on multiple parameters and lists.  The workflow file is
 
 ```text
 .github/workflows/matrix-build-images.yaml
@@ -411,7 +413,7 @@ The workflow:
 
 - Purpose: Main production matrix build workflow across compilers, MPI stacks, GPU options, and architectures.
 - Triggers: `workflow_dispatch`.
-- Key jobs:
+- Key GHA jobs:
   - `build-matrix`: Calls the reusable build workflow for full matrix combinations.
 
 It defines the full production matrix. It expands across compiler, MPI, GPU, architecture, and operating-system combinations. 
