@@ -1,4 +1,4 @@
-name: Select a HPC Development Container Image to Build, Test, and Deploy (GHCR)
+name: Select an HPC Development Container to Deploy on GHCR
 
 on:
   workflow_dispatch:
