@@ -115,6 +115,9 @@ jobs:
   build-image:
     name: Build, Test, & Publish ${{inputs.os }}
     runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Check out Repository
