@@ -67,7 +67,7 @@ containers/deploy/ncar-hpc/
 
 contains deployment configuration for NCAR HPC systems, including Apptainer and PBS-related assets for systems such as Derecho and Casper.
 
-[This section needs to be expanded.]
+For guidance on running on NCAR clusters see [NCAR_HowTo.md](containers/deploy/ncar-hpc/NCAR_HowTo.md) and some contextual aspects below.
 
 ### Build and Application Scripts
 
