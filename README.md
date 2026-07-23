@@ -284,7 +284,7 @@ Individual Docker stages append `export` statements to this file through the `ad
 
 This configuration file is sourced by login shells inside the container and serves as the authoritative description of the runtime environment. Because the image is assembled from many independently built layers, a centralized environment file helps ensure that later stages can locate compilers, headers, libraries, and tools installed by earlier stages.
 
-Libraries are installed under versioned prefixes beneath `/container/`, which makes the image layout explicit and easier to inspect. This is similar to the often used /opt/ directory for optional software for a given operating system implementation. For example in the `hpcdev-x86_64:noble-gcc15-mpich-26.07` container, 
+Libraries are installed under versioned prefixes beneath `/container/`, which makes the image layout explicit and easier to inspect. For example in the `hpcdev-x86_64:noble-gcc15-mpich-26.07` container, 
 
 ```
 # ls container/
