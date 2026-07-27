@@ -8,7 +8,10 @@ The images are intended to provide reproducible development and testing environm
 
 Although the repository name suggests a GitHub Actions demonstration, the core implementation is the container build system under `containers/devenv` and the GitHub Actions workflows that generate and execute the build matrix.
 
-The design relies on a parameterized multi-stage Dockerfile, centralized environment configuration, source-built scientific libraries, and GitHub Actions workflows that expand and validate many compiler, MPI, GPU, architecture, and operating-system combinations. This multiple container approach is useful for maintaining stable builds of HPC software on modern HPC systems, and the representative workflow for this starts with `matrix-build-images.yaml`. For use as a standin for testing on a particular type of system with containerized runners, use the `dial-an-image.yaml` workflow with parameterization corresponding to the target system. The resulting image can be shared with users or collaborating developers for a convenient development platform. If your main interest is to quickly use a known stand-in for a particular HPC environment, then an image can be pulled from the registry.
+The design relies on a parameterized multi-stage Dockerfile, centralized environment configuration, source-built scientific libraries, and GitHub Actions workflows that expand and validate many compiler, MPI, GPU, architecture, and operating-system combinations. This multiple container approach is useful for maintaining stable builds of HPC software on modern HPC systems, and the representative workflow for this starts with `matrix-build-images.yaml`. For use as a standin for testing on a particular type of system with containerized runners, use the `dial-an-image.yaml` workflow with parameterization corresponding to the target system. The resulting image can be shared with users or collaborating developers for a convenient development platform. If your main interest is to quickly use a known stand-in for a particular HPC environment, then an image can be pulled from the Docker Hub registry.
+
+[TODO: make a list of containers with links to a human readable manifest/inventory for each container.]
+
 
 ## Image Composition
 
