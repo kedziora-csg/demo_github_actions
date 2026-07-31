@@ -299,6 +299,15 @@ jobs:
             ${{ env.CI_TAG }} \
             cat /container/config_env.sh
 
+      - name: Test Image - Hello World MPI
+        if: ${{ inputs.test }}
+        run: |
+          docker run --rm --env-file test_env.cfg \
+            --env OMP_NUM_THREADS=2 \
+            --env NRANKS=2 \
+            ${{ env.CI_TAG }} \
+            /container/extras/build_hello-world-mpi.sh
+
       - name: Test Image - OSU
         if: ${{ inputs.test }}
         run: |

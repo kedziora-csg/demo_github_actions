@@ -14,6 +14,8 @@
     "words": ["megalinter", "oxsecurity",
               "benkirk",
               "almalinux",
-              "shfmt"],
+              "shfmt",
+              "sysfs", "getcpu", "numa", "procbind", "nranks", "nthreads",
+              "apptainer", "derecho", "ompthreads", "mpiprocs"],
   "version": "0.2"
 }

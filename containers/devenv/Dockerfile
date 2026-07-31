@@ -1521,6 +1521,9 @@ RUN exec &> >(tee /container/logs/final.log) \
     && add_conf "export LD_LIBRARY_PATH=$(echo "${LD_LIBRARY_PATH}" | awk -v RS=: -v ORS=: '!seen[$0]++' | sed 's/:$//')" \
     && add_conf "export MANPATH=$(find / -type d -path "*/share/man" -o -path "*/doc/man" | sort -u | tr '\n' ':')" \
     && add_conf "\n# (container image build completed at $(date))" \
+    && ( command -v mpicxx >/dev/null 2>&1 \
+         && HELLO_WORLD_MPI_RUN=0 /container/extras/build_hello-world-mpi.sh \
+         || echo "no mpicxx in this image; skipping hello_world_mpi" ) \
     && useradd plainuser -d /home/plainuser \
     && echo "plainuser 	ALL=(ALL)	NOPASSWD: ALL" >> /etc/sudoers \
     && chown -R plainuser: /container/ \
