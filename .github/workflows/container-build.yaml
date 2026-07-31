@@ -88,13 +88,13 @@ jobs:
           pwd
           find * ! -type d
 
-      - name: Hello World
+      - name: Placement Report
         if: ${{ inputs.hello_world }}
         run: |
-          mpicxx -o ./hello_world_mpi src/hello_world_mpi.cxx -fopenmp
-          ldd ./hello_world_mpi
+          mpicxx -o ./report_placement src/report_placement.cxx -fopenmp
+          ldd ./report_placement
           export OMP_NUM_THREADS=2
-          mpiexec -n 2 ${{ matrix.extra_mpiexec_args }} ./hello_world_mpi || true
+          mpiexec -n 2 ${{ matrix.extra_mpiexec_args }} ./report_placement || true
 
       - name: DART
         if: ${{ inputs.dart }}

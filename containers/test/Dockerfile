@@ -41,10 +41,10 @@ export MPIR_CVAR_ENABLE_GPU=0
 EOF
 
 RUN echo "Testing Image from ${BASE_IMAGE} ..." \
-    && mpicxx -o ./hello_world_mpi /container/extras/hello_world_mpi.cxx -fopenmp \
-    && report_cpu_features ./hello_world_mpi \
+    && mpicxx -o ./report_placement /container/extras/report_placement.cxx -fopenmp \
+    && report_cpu_features ./report_placement \
     && export OMP_NUM_THREADS=2 \
-    && mpiexec -n 2 ./hello_world_mpi \
+    && mpiexec -n 2 ./report_placement \
     && docker-clean
 
 RUN echo "Testing Image from ${BASE_IMAGE} ..." \

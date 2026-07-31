@@ -301,14 +301,19 @@ This is provides the added elements for the HPC development tool chain. Examples
 
 ```
 # ls container/extras/
-Dockerfile	           build_mpas.sh		          hello_world.f90
-build_cesm.sh	       build_muram.sh		          hello_world_mpi.cxx
-build_common.cfg       build_osu-micro-benchmarks.sh  install_conda.sh
-build_cuda_samples.sh  build_petsc.sh		          install_npl.sh
-build_dart.sh	       build_wrf.sh		              parallel_stl_sort.cxx
-build_esmf.sh	       hello_world.c		          remove_static_bloat.sh
-build_fasteddy.sh      hello_world.cu		          update_headers.pl
-build_kokkos.sh        hello_world.cxx
+Dockerfile                      build_wrf.sh
+build_cesm.sh                   hello_world.c
+build_common.cfg                hello_world.cu
+build_cuda_samples.sh           hello_world.cxx
+build_dart.sh                   hello_world.f90
+build_esmf.sh                   hello_world_mpi.cxx
+build_fasteddy.sh               install_conda.sh
+build_kokkos.sh                 install_npl.sh
+build_mpas.sh                   parallel_stl_sort.cxx
+build_muram.sh                  remove_static_bloat.sh
+build_osu-micro-benchmarks.sh   report_placement.cxx
+build_petsc.sh                  update_headers.pl
+build_report-placement.sh
 ```
 
 ## NVHPC-Specific Handling

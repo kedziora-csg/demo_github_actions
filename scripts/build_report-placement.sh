@@ -12,18 +12,18 @@ source ${SCRIPTDIR}/build_common.cfg \
 # Build the hybrid MPI+OpenMP placement diagnostic into ${INSTALL_ROOT}/bin,
 # which is already on PATH inside the container, then smoke-test it.
 #
-# Set HELLO_WORLD_MPI_RUN=0 to compile only -- used by the devenv Dockerfile,
+# Set REPORT_PLACEMENT_RUN=0 to compile only -- used by the devenv Dockerfile,
 # which bakes the binary in but should not launch MPI during `docker build`.
 
 NRANKS="${NRANKS:-2}"
-HELLO_WORLD_MPI_RUN="${HELLO_WORLD_MPI_RUN:-1}"
+REPORT_PLACEMENT_RUN="${REPORT_PLACEMENT_RUN:-1}"
 
-exe="${INSTALL_ROOT}/bin/hello_world_mpi"
+exe="${INSTALL_ROOT}/bin/report_placement"
 
 # Prefer the copy next to this script; fall back to the in-container extras/.
-src="${SCRIPTDIR}/hello_world_mpi.cxx"
-[ -f "${src}" ] || src="/container/extras/hello_world_mpi.cxx"
-[ -f "${src}" ] || { echo "cannot locate hello_world_mpi.cxx!!"; exit 1; }
+src="${SCRIPTDIR}/report_placement.cxx"
+[ -f "${src}" ] || src="/container/extras/report_placement.cxx"
+[ -f "${src}" ] || { echo "cannot locate report_placement.cxx!!"; exit 1; }
 
 MPICXX="${MPICXX:-mpicxx}"
 which ${MPICXX} >/dev/null 2>&1 \
@@ -33,7 +33,7 @@ which ${MPICXX} >/dev/null 2>&1 \
 # currently build accepts -fopenmp (nvhpc aliases it), but -mp / -qopenmp are
 # the native spellings for nvhpc / older Intel and cost nothing to check.
 openmp_flag=""
-probe="${STAGE_DIR}/hello_world_mpi_ompprobe.cxx"
+probe="${STAGE_DIR}/report_placement_ompprobe.cxx"
 cat <<'EOF' > ${probe}
 #include <omp.h>
 int main () { return omp_get_max_threads () > 0 ? 0 : 1; }
@@ -71,7 +71,7 @@ set +x
 
 report_cpu_features ${exe} 2>/dev/null || ldd ${exe} || true
 
-if [ "${HELLO_WORLD_MPI_RUN}" != "0" ]; then
+if [ "${REPORT_PLACEMENT_RUN}" != "0" ]; then
     echo
     echo "Running ${exe} on ${NRANKS} rank(s), OMP_NUM_THREADS=${OMP_NUM_THREADS:-<unset>} ..."
     mpiexec -n ${NRANKS} ${mpiexec_args} ${exe}
