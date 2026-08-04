@@ -189,12 +189,70 @@ module. MPI 5.0's standardized ABI softens (1) once implementations ship it.
 
 ### Strategy A — build in the container, run against Cray MPICH (ABI shim)
 
-This is what `PBS/OSU_derecho.pbs` already does; `/container/bin/report_placement`
-slots straight in.
+This is what `PBS/OSU_derecho.pbs` already does, and what
+`PBS/Placement_derecho.pbs` does for this tool. **Confirmed working on Derecho**
+(2 nodes, `leap-gcc-mpich`, Cray MPICH 8.1.32.110).
+
+#### ⚠ The `lib` vs `lib-abi-mpich` trap — read this first
+
+Cray MPICH ships **two** library directories, and only one of them works:
+
+| directory | contents | use it? |
+|---|---|---|
+| `${CRAY_MPICH_DIR}/lib` | the native Cray build, `libmpi_cray.so.12` | **no** |
+| `${CRAY_MPICH_DIR}/lib-abi-mpich` | the ABI shim, `libmpi.so.12` with stock MPICH's symbol layout | **yes** |
+
+Only `lib-abi-mpich` can impersonate the container's own MPICH. Point
+`LD_LIBRARY_PATH` at `lib` and nothing supplies a competing `libmpi.so.12`, so
+the container's own library wins.
+
+**The failure is quiet and looks like a working job.** Every rank
+singleton-initialises into its own `MPI_COMM_WORLD` of size 1 — you get N
+processes, correctly distributed across nodes, each correctly pinned by PALS,
+that never communicate. Diagnostic signature:
+
+```
+# mpi MPICH Version:      5.0.0        <- the CONTAINER's MPICH, not Cray's
+MPI rank 0/1 ...                       <- repeated N times, always 0/1
+```
+
+versus a healthy run:
+
+```
+# mpi MPI VERSION    : CRAY MPICH version 8.1.32.110 (ANL base 3.4a2)
+MPI rank 0/4 ... host dec0769
+MPI rank 2/4 ... host dec0770
+```
+
+The `# mpi` header line makes this a one-line diagnosis. Without it the symptom
+is easy to misread as a PMI or bind problem and chase for an afternoon.
+
+Verify before running anything real — `libmpi.so.12` must resolve under
+`/opt/cray`, not `/container`:
+
+```bash
+./apptainer-launch-*.sh ldd /container/bin/report_placement | grep -i mpi
+```
+
+If it still points into `/container/mpich/...`, also check whether the binary
+carries a `DT_RPATH` (which beats `LD_LIBRARY_PATH`) rather than a `DT_RUNPATH`
+(which does not): `readelf -d <exe> | grep -E 'RPATH|RUNPATH'`.
+
+#### The rest of Strategy A
 
 - **The container must be an MPICH variant** (`mpi: mpich` or `mpich3`). Cray
   MPICH is ABI-compatible with MPICH's `libmpi.so.12` only — an OpenMPI container
   cannot be shimmed and silently falls back to container-internal TCP.
+- **The container does not fight you.** The MPICH stage registers its lib dir
+  only in `/etc/ld.so.conf.d/` + `ldconfig`, never on `LD_LIBRARY_PATH`
+  (`containers/devenv/Dockerfile:1091`). Since `LD_LIBRARY_PATH` is searched
+  before `/etc/ld.so.cache`, a correct entry wins cleanly.
+- **Bind `/run` *and* `/var/run`**, not just `/run/palsd` — PALS needs more than
+  the socket. Binding all of `/opt/cray` is simpler than surgical per-directory
+  binds and avoids missing a transitive dependency.
+- **Do not hardcode PALS or libfabric version paths** (`/opt/cray/pals/1.6`,
+  `/opt/cray/libfabric/1.22.0`). Resolve them at runtime, preferring
+  `NCAR_ROOT_LIBFABRIC`; the versions move at system updates.
 - The generated `apptainer-launch-${NCAR_HOST}-${LMOD_FAMILY_MPI}.sh` puts
   `${CRAY_MPICH_DIR}/lib-abi-mpich` first on `LD_LIBRARY_PATH`, binds `/opt/cray`,
   `/run`, `/var/run` (PALS) and `/usr/lib64:/host/lib64`, and sets
@@ -237,9 +295,15 @@ stack" from "userspace ABI".
    halves and `# mpi` names Cray MPICH.
 4. **Compare** against the Strategy B native run.
 
-Deliberately deferred: `PBS/HelloWorld_derecho.pbs` and a Cray-native build
-script under `containers/deploy/ncar-hpc/`. Both are near-copies of
-`OSU_derecho.pbs` once steps 2–3 are confirmed by hand.
+Step 1 and a reduced form of step 3 are done (see *Verification*).
+`PBS/Placement_derecho.pbs` implements steps 2 and 3 at full node width and adds
+an unbound control case.
+
+Still deferred: a Cray-native build script for Strategy B, and folding this
+guidance into `NCAR_HowTo.md` — whose `Deffile` still bootstraps from Docker Hub
+`ncarcisl/hpcdev-x86_64` rather than GHCR, so the deploy side has not been
+migrated even though the images now publish to
+`ghcr.io/<owner>/hpcdev-<arch>`.
 
 ---
 
@@ -258,6 +322,7 @@ script under `containers/deploy/ncar-hpc/`. Both are near-copies of
 | `.github/workflows/{devel-build-images,matrix-smoketest-applications,container-build}.yaml` | Renamed step + new source path |
 | `README.md` | Regenerated the `container/extras/` listing |
 | `.cspell.json` | Allowlist additions |
+| `containers/deploy/ncar-hpc/PBS/Placement_derecho.pbs` | New — runs the tool on Derecho through the ABI shim, sweeping three bindings |
 
 ## Verification
 
@@ -275,15 +340,30 @@ script under `containers/deploy/ncar-hpc/`. Both are near-copies of
   path skipping cleanly rather than failing.
 - The restored trivial `hello_world_mpi.cxx` still compiles and runs.
 
+**Verified on Derecho** (2 nodes, `leap-gcc-mpich.sif`, Strategy A):
+
+- The ABI shim engages and the header confirms it:
+  `# mpi MPI VERSION : CRAY MPICH version 8.1.32.110 (ANL base 3.4a2)`.
+- Ranks form a single `MPI_COMM_WORLD` across both nodes (`ranks 4`, ranks 0–1 on
+  `dec0769`, 2–3 on `dec0770`).
+- PALS `--cpu-bind depth` pins correctly (`nallowed 1` per rank).
+- **`l3` populates on real hardware** — the last unverified code path. On an
+  EPYC 7763, cpus 0 and 1 both report `l3 0`, which is correct: Milan puts cores
+  0–7 on one L3.
+- Cray MPICH granted `provided=FUNNELED` for the `FUNNELED` request.
+
 **Not yet verified:**
 
-- **x86_64 and non-GCC compilers.** All local testing was aarch64/GCC/OpenMPI.
-  CI is the first exercise of nvhpc, oneapi, aocc, clang and MPICH.
-- **The `l3` column populated.** The Docker VM exposes only L1 and L2, so only
-  the graceful-degradation path (`l3 -`) has been proven. It should populate on
-  a CI runner and on Derecho; if it does not, the level-scan in `read_l3_group`
-  is the first place to look.
-- **Anything on Derecho.** Section 5 is untested guidance.
+- **x86_64 and non-GCC compilers.** All local testing was aarch64/GCC/OpenMPI;
+  the Derecho run was x86_64/GCC/Cray-MPICH. CI is the first exercise of nvhpc,
+  oneapi, aocc and clang.
+- **Interesting placement.** The Derecho run used `ncpus=2`, so every rank landed
+  on one chiplet, one socket, one NUMA node — `socket`, `numa` and `l3` were all
+  constant and could not discriminate. `PBS/Placement_derecho.pbs` requests whole
+  nodes precisely to fix this.
+- **The `-d` argument to `--cpu-bind depth`.** A bare `--cpu-bind depth` is
+  confirmed working; the explicit `-d N` in `Placement_derecho.pbs` is not.
+- **Strategy B** (native Cray build) and the container-vs-native `diff`.
 
 CI entry point:
 
