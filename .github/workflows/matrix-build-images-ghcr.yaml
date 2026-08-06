@@ -1,0 +1,232 @@
+name: Build HPC Development Images (GHCR)
+
+# GHCR counterpart to matrix-build-images.yaml.  The two reusable callees have
+# identical input names and semantics, so the matrix axes, every include:
+# build-args block and every exclude: below are carried over verbatim -- keep
+# them in sync when either file changes.
+#
+# Differences from the DockerHub original, and only these:
+#   * uses:        -> build-hpc-dev-image-ghcr.yaml
+#   * secrets:     -> registry_token (GITHUB_TOKEN) instead of dockerhub_token
+#   * permissions: -> packages: write, so GITHUB_TOKEN may push to GHCR
+#   * docker_repo  -> GHCR namespaces
+#   * image_set    -> new input; see below
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_set:
+        description: "Which combinations to build"
+        type: choice
+        required: true
+        default: derecho
+        options:
+          - derecho
+          - full
+
+      os:
+        description: "Base OS"
+        type: choice
+        required: true
+        default: leap
+        options:
+          - almalinux8
+          - almalinux9
+          - almalinux10
+          - jammy
+          - noble
+          - resolute
+          - leap
+          - tumbleweed
+
+      docker_repo:
+        description: "Container Repository for Deployment"
+        type: string
+        required: true
+        default: "ghcr.io/${{ github.repository_owner }}/hpcdev"
+
+      test:
+        description: "Test Image"
+        type: boolean
+        required: false
+        default: true
+
+      publish:
+        description: "Publish Image"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-matrix:
+    name: Build
+    # image_set=derecho narrows to the blessed Derecho deployment set:
+    #   leap x {oneapi, gcc14, nvhpc} x {mpich, openmpi}, x86_64, nogpu = 6 jobs.
+    # gcc14 rather than gcc because Derecho's module is gcc/14.3.0 and the point
+    # of the sweep is comparability with a native build.
+    # Combinations outside the set are SKIPPED rather than removed, so there is
+    # only one axis list to maintain -- at the cost of skipped entries showing
+    # up in the run view.
+    if: >-
+      ${{ inputs.image_set == 'full' ||
+          (matrix.arch == 'x86_64' && matrix.gpu == 'nogpu' &&
+           contains(fromJSON('["oneapi","gcc14","nvhpc"]'), matrix.compiler)) }}
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        compiler: [nvhpc, oneapi, aocc, gcc, gcc12, gcc14, gcc15, gcc16]
+        mpi: [openmpi, mpich]
+        gpu: [nogpu, cuda]
+        arch: [x86_64, aarch64]
+
+        include:
+          # gpu architecture-dependent build arg specifications
+          - arch: x86_64
+            gpu: cuda
+            gpu_build_args: |
+              CUDA_VERSION=12.9
+              CUDA_INSTALLER_URL=https://developer.download.nvidia.com/compute/cuda/12.9.1/local_installers/cuda_12.9.1_575.57.08_linux.run
+
+          - arch: aarch64
+            gpu: cuda
+            gpu_build_args: |
+              CUDA_VERSION=12.9
+              CUDA_INSTALLER_URL=https://developer.download.nvidia.com/compute/cuda/12.9.1/local_installers/cuda_12.9.1_575.57.08_linux_sbsa.run
+
+          # compiler build arg specifications
+          - compiler: gcc
+            compiler_build_args: |
+              COMPILER_FAMILY=os-gcc
+
+          - compiler: gcc12
+            compiler_build_args: |
+              COMPILER_FAMILY=gcc
+              GCC_VERSION=12.5.0
+
+          - compiler: gcc14
+            compiler_build_args: |
+              COMPILER_FAMILY=gcc
+              GCC_VERSION=14.3.0
+
+          - compiler: gcc15
+            compiler_build_args: |
+              COMPILER_FAMILY=gcc
+              GCC_VERSION=15.3.0
+
+          - compiler: gcc16
+            compiler_build_args: |
+              COMPILER_FAMILY=gcc
+              GCC_VERSION=16.1.0
+
+          - compiler: oneapi
+            compiler_build_args: |
+              COMPILER_FAMILY=oneapi
+              ONEAPI_VERSION=2026.0.0
+              ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e2f4cda3-8891-4d0e-bf60-00d19c4e3e27/intel-dpcpp-cpp-compiler-2026.0.0.564_offline.sh
+              ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/176ca159-bee8-44f2-9164-db26f95de382/intel-fortran-compiler-2026.0.0.573_offline.sh
+
+          - compiler: aocc
+            compiler_build_args: |
+              COMPILER_FAMILY=aocc
+
+          # for NVHPC, we can specify a different CUDA if it suits us.
+          # (since the compiler args come after gpu args in build-hpc-development-image.yaml we are relying on precedence)
+          - compiler: nvhpc
+            arch: x86_64
+            compiler_build_args: |
+              COMPILER_FAMILY=nvhpc
+              MARCH_FLAGS=-tp=x86-64-v3
+              NVHPC_VERSION=26.5
+              NVHPC_URL=https://developer.download.nvidia.com/hpc-sdk/26.5/nvhpc_2026_265_Linux_x86_64_cuda_multi.tar.gz
+
+          - compiler: nvhpc
+            arch: aarch64
+            compiler_build_args: |
+              COMPILER_FAMILY=nvhpc
+              NVHPC_VERSION=26.5
+              NVHPC_URL=https://developer.download.nvidia.com/hpc-sdk/26.5/nvhpc_2026_265_Linux_aarch64_cuda_multi.tar.gz
+
+          # # clang+flang from source always seems to fail on GHA public runners -
+          # # 16GB of RAM simply isn't enough for flang as of 20.1.8.
+          # # Need build cloud or caches from CIRRUS
+          # - compiler: clang
+          #   compiler_build_args: |
+          #     COMPILER_FAMILY=clang
+          #     LLVM_VERSION=21.1.8
+
+          # mpi build arg specifications
+          - mpi: openmpi
+            mpi_build_args: |
+              MPI_FAMILY=openmpi
+              OPENMPI_VERSION=5.0.10
+
+          - mpi: mpich
+            mpi_build_args: |
+              MPI_FAMILY=mpich
+              MPICH_VERSION=5.0.1
+
+          # - mpi: mpich3
+          #   mpi_build_args: |
+          #     MPI_FAMILY=mpich3
+          #     MPICH_VERSION=3.4.3
+
+        exclude:
+          - arch: aarch64
+            compiler: oneapi
+          - arch: aarch64
+            compiler: aocc
+          - arch: aarch64
+            mpi: mpich3
+
+          # CUDA 12.9 incompatibilities
+          - compiler: gcc15
+            gpu: cuda
+
+          - compiler: gcc16
+            gpu: cuda
+
+          # gcc16 & openmpi 5.0.10 no bueno; reevalute with 5.0.11
+          - compiler: gcc16
+            mpi: openmpi
+
+          # - compiler: nvhpc
+          #   arch: aarch64
+          #   mpi: mpich
+
+          - compiler: clang
+            arch: aarch64
+
+    uses: ./.github/workflows/build-hpc-dev-image-ghcr.yaml
+    with:
+      docker_repo: ${{ inputs.docker_repo }}
+      os: ${{ inputs.os }}
+      arch: ${{ matrix.arch }}
+      runner: ${{ matrix.arch == 'x86_64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+      free_runner_space: true
+      conda: true
+      gpu: ${{ matrix.gpu }}
+      gpu_build_args: ${{ matrix.gpu_build_args }}
+      compiler: ${{ matrix.compiler }}
+      compiler_build_args: ${{ matrix.compiler_build_args }}
+      mpi: ${{ matrix.mpi }}
+      mpi_build_args: ${{ matrix.mpi_build_args }}
+      test: ${{ inputs.test }}
+      publish: ${{ inputs.publish }}
+      extra_build_args: |
+        HDF5_VERSION=1.14.5
+        HDF5_URL=https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.5/hdf5-1.14.5.tar.gz
+        NETCDF_C_VERSION=4.10.0
+        NETCDF_FORTRAN_VERSION=4.6.3
+        PNETCDF_VERSION=1.14.1
+        PIO_VERSION=2.6.7
+        PIO_TAG=pio2_6_7
+        FFTW_VERSION=3.3.10
+        HEFFTE_VERSION=2.4.1
+
+    secrets:
+      registry_token: ${{ secrets.GITHUB_TOKEN }}

@@ -173,8 +173,12 @@ void hw_get_cpu (int &cpu, int &node)
 //   topology/thread_siblings_list: the SMT siblings of this CPU.  Its first
 //                                  element is a globally unique physical core
 //                                  id, and its length is an SMT detector (1 =>
-//                                  SMT off, which is what Derecho should show).
-//                                  This is what we report as 'core'.
+//                                  SMT off).  This is what we report as 'core',
+//                                  and it is what makes the SMT case readable:
+//                                  on Derecho (SMT ON, 128 cores / 256 logical
+//                                  CPUs) an unbound thread on cpu 142 correctly
+//                                  reports core 14 -- its sibling.  core_id
+//                                  alone would have been ambiguous there.
 //
 // sysfs is visible under both Docker (read-only real sysfs) and Apptainer
 // ("mount sys = yes" is the default), and it is NOT cgroup-filtered -- it shows
@@ -521,8 +525,11 @@ const char *const CSV_TAG = "csv: ";
 
 std::string csv_header ()
 {
+  // No nranks column: it is identical in every row and already stated on the
+  // '# openmp ... | ranks N' header line.  nthreads stays -- it is per-rank and
+  // ranks can legitimately differ.
   return std::string (CSV_TAG)
-    + "rank,nranks,thread,nthreads,host,cpu,core,socket,numa,l3,place,"
+    + "rank,thread,nthreads,host,cpu,core,socket,numa,l3,place,"
       "nallowed,affinity\n";
 }
 
@@ -535,7 +542,7 @@ std::string num_or_empty (const int v)
   return os.str ();
 }
 
-std::string make_csv_record (const int rank, const int nranks,
+std::string make_csv_record (const int rank,
                              const int tid, const int nthreads,
                              const std::string &host,
                              const ThreadObs &obs,
@@ -552,7 +559,7 @@ std::string make_csv_record (const int rank, const int nranks,
 
   std::ostringstream os;
   os << CSV_TAG
-     << rank << ',' << nranks << ','
+     << rank << ','
      << tid << ',' << nthreads << ','
      << host << ','
      << num_or_empty (obs.cpu) << ','
@@ -659,7 +666,7 @@ int main (int argc, char **argv)
     {
       human_blob += make_thread_record (rank, nranks, (int) i, nthreads, host,
                                         obs[i], topo);
-      csv_blob += make_csv_record (rank, nranks, (int) i, nthreads, host,
+      csv_blob += make_csv_record (rank, (int) i, nthreads, host,
                                    obs[i], topo);
     }
 

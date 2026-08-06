@@ -273,16 +273,32 @@ carries a `DT_RPATH` (which beats `LD_LIBRARY_PATH`) rather than a `DT_RUNPATH`
 
 ### Strategy B — build natively in the Cray environment (the reference)
 
+**Done, and it agrees with Strategy A exactly** — see *Container ≡ native* under
+*Verification*.
+
 ```bash
-module --force purge && module load ncarenv/24.12 && module reset
-module load craype cray-mpich gcc
+module --force purge && module load ncarenv/25.10 && module reset
+module load gcc/14.3.0
 CC -fopenmp -o report_placement_native scripts/report_placement.cxx
-mpiexec -n 8 -ppn 4 --cpu-bind depth -d 4 ./report_placement_native
+mpiexec -n 16 -ppn 8 --cpu-bind depth -d 16 ./report_placement_native
 ```
 
-Same source, same output format → `diff` the two runs. A host-built binary can
-also be run *inside* the container (`/glade` is already bound), isolating "MPI
-stack" from "userspace ABI".
+Same source, same output format, so `diff` is the comparison. Strip hostnames
+first, since the two jobs land on different nodes:
+
+```bash
+for f in container.out native.out; do
+    grep '^MPI rank' $f | sed -E 's/ host [^ ]+//' > $f.norm
+done
+diff container.out.norm native.out.norm
+```
+
+Expect **no differences** for any deterministically-bound sweep. Differences in
+an unbound sweep are meaningless — two runs of the *same* binary differ there
+too.
+
+A host-built binary can also be run *inside* the container (`/glade` is already
+bound), which isolates "MPI stack" from "userspace ABI" as a third data point.
 
 ### Validation order
 
@@ -295,12 +311,12 @@ stack" from "userspace ABI".
    halves and `# mpi` names Cray MPICH.
 4. **Compare** against the Strategy B native run.
 
-Step 1 and a reduced form of step 3 are done (see *Verification*).
-`PBS/Placement_derecho.pbs` implements steps 2 and 3 at full node width and adds
-an unbound control case.
+**All four steps are done** (see *Verification*). `PBS/Placement_derecho.pbs`
+runs steps 2–3 at full node width plus two control cases, and step 4 — the
+container-vs-native `diff` — came back identical.
 
-Still deferred: a Cray-native build script for Strategy B, and folding this
-guidance into `NCAR_HowTo.md` — whose `Deffile` still bootstraps from Docker Hub
+Still deferred: folding this guidance into `NCAR_HowTo.md` — whose `Deffile`
+still bootstraps from Docker Hub
 `ncarcisl/hpcdev-x86_64` rather than GHCR, so the deploy side has not been
 migrated even though the images now publish to
 `ghcr.io/<owner>/hpcdev-<arch>`.
@@ -344,26 +360,71 @@ migrated even though the images now publish to
 
 - The ABI shim engages and the header confirms it:
   `# mpi MPI VERSION : CRAY MPICH version 8.1.32.110 (ANL base 3.4a2)`.
-- Ranks form a single `MPI_COMM_WORLD` across both nodes (`ranks 4`, ranks 0–1 on
-  `dec0769`, 2–3 on `dec0770`).
-- PALS `--cpu-bind depth` pins correctly (`nallowed 1` per rank).
-- **`l3` populates on real hardware** — the last unverified code path. On an
-  EPYC 7763, cpus 0 and 1 both report `l3 0`, which is correct: Milan puts cores
-  0–7 on one L3.
-- Cray MPICH granted `provided=FUNNELED` for the `FUNNELED` request.
+  Through the launcher, `libmpi.so.12` resolves to
+  `/opt/cray/pe/mpich/8.1.32/ofi/gnu/12.3/lib-abi-mpich/`; container-native it
+  resolves to `/container/mpich/5.0.0/lib/`.
+- Ranks form a single `MPI_COMM_WORLD` across both nodes.
+- PALS `--cpu-bind depth -d N` pins correctly, including the explicit `-d`.
+- **`l3` populates on real hardware.** 16 distinct L3 groups across 128 cores
+  (8-core CCDs), and a 16-thread rank straddles two of them — threads 0–7 on
+  `l3 0`, threads 8–15 on `l3 8`.
+- **The nodes are NPS4**: 8 NUMA domains, ranks 0–3 on socket 0, 4–7 on socket 1.
+
+### ★ Container ≡ native (jobs 7024919 vs 7024910)
+
+The central claim of Strategy A, now measured. The same source built two ways —
+inside the container, and natively with `CC` in the Cray environment — run
+through the same four sweeps:
+
+| sweep | binding | result |
+|---|---|---|
+| A, B, C | deterministic | **528 rows byte-for-byte identical** (hostnames stripped) |
+| D | `--cpu-bind none` + `OMP_PROC_BIND=false` | differs, and *should* — both sides report `nallowed 256`, i.e. correctly unbound; where an unbound thread lands is nondeterministic run to run |
+
+Once the ABI shim is in place, the container is not a different execution
+environment: same MPI library, same `provided` thread level, same placement down
+to the individual thread. This is what makes `report_placement` usable as an
+acceptance test — build it both ways, `diff`, and any difference in sweeps A–C is
+a real regression rather than noise.
+
+Two facts the comparison corrected:
+
+- **SMT is enabled on Derecho** — 128 physical cores, 256 logical CPUs
+  (`nallowed 256`, `affinity 0-255` when unbound). Earlier notes here assumed SMT
+  was off.
+- **`thread_siblings_list` earned its place.** With threads roaming onto the high
+  logical CPUs, `cpu 142` correctly resolves to `core 14` (its SMT sibling,
+  142 − 128). `core_id` alone would have been ambiguous. Sweeps A–C never leave
+  cpus 0–127, so only the unbound sweep exposed this.
+- Incidental: PALS stages a native binary into `/var/run/palsd/<uuid>/files/0/`
+  rather than running it in place, which is why `# exe` differs between the two
+  runs. `--no-transfer` suppresses that.
+
+### ⚠ Omitting `--cpu-bind` is not the same as being unbound
+
+Measured, and the opposite of what was originally predicted here:
+
+| | rank mask | thread outcome |
+|---|---|---|
+| no `--cpu-bind` | PALS pins each rank to **one core** | all 16 threads share that single core — 16× oversubscription while 120 cores idle |
+| `--cpu-bind none` + `OMP_PROC_BIND=false` | none | genuinely free, `nallowed 256` |
+
+A true unbound baseline needs **both** knobs, because there are two independent
+binding layers: `--cpu-bind` controls the mask PALS applies, `OMP_PROC_BIND`
+controls whether the OpenMP runtime re-binds within it. Drop only the first and
+`OMP_PROC_BIND=spread` re-pins every thread to its own core out of all 256.
+
+This is invisible from the `cpu` column alone. Only `nallowed 1` *combined with*
+every thread in a rank reporting the same `cpu` reveals it — which is the case
+the affinity mask was added to catch.
 
 **Not yet verified:**
 
 - **x86_64 and non-GCC compilers.** All local testing was aarch64/GCC/OpenMPI;
-  the Derecho run was x86_64/GCC/Cray-MPICH. CI is the first exercise of nvhpc,
+  the Derecho runs were x86_64/GCC/Cray-MPICH. CI is the first exercise of nvhpc,
   oneapi, aocc and clang.
-- **Interesting placement.** The Derecho run used `ncpus=2`, so every rank landed
-  on one chiplet, one socket, one NUMA node — `socket`, `numa` and `l3` were all
-  constant and could not discriminate. `PBS/Placement_derecho.pbs` requests whole
-  nodes precisely to fix this.
-- **The `-d` argument to `--cpu-bind depth`.** A bare `--cpu-bind depth` is
-  confirmed working; the explicit `-d N` in `Placement_derecho.pbs` is not.
-- **Strategy B** (native Cray build) and the container-vs-native `diff`.
+- **GPU images.** No `--nv`, no CUDA variant, no `set_gpu_rank` interaction.
+- **OpenMPI containers on Derecho** — see the scope note at the top of section 5.
 
 CI entry point:
 
