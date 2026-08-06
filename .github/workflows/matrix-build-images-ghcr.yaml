@@ -39,11 +39,15 @@ on:
           - leap
           - tumbleweed
 
+      # NOTE: workflow_dispatch input defaults are LITERAL -- ${{ }} is not
+      # evaluated here (unlike workflow_call defaults), so it cannot reference
+      # github.repository_owner.  Left blank and resolved in the with: block
+      # below, which keeps the workflow owner-agnostic.
       docker_repo:
-        description: "Container Repository for Deployment"
+        description: "Container repository (blank = ghcr.io/<this repo's owner>/hpcdev)"
         type: string
-        required: true
-        default: "ghcr.io/${{ github.repository_owner }}/hpcdev"
+        required: false
+        default: ""
 
       test:
         description: "Test Image"
@@ -64,25 +68,34 @@ permissions:
 jobs:
   build-matrix:
     name: Build
-    # image_set=derecho narrows to the blessed Derecho deployment set:
-    #   leap x {oneapi, gcc14, nvhpc} x {mpich, openmpi}, x86_64, nogpu = 6 jobs.
-    # gcc14 rather than gcc because Derecho's module is gcc/14.3.0 and the point
-    # of the sweep is comparability with a native build.
-    # Combinations outside the set are SKIPPED rather than removed, so there is
-    # only one axis list to maintain -- at the cost of skipped entries showing
-    # up in the run view.
-    if: >-
-      ${{ inputs.image_set == 'full' ||
-          (matrix.arch == 'x86_64' && matrix.gpu == 'nogpu' &&
-           contains(fromJSON('["oneapi","gcc14","nvhpc"]'), matrix.compiler)) }}
+    #---------------------------------------------------------------------------
+    # image_set selects the AXIS VALUES, evaluated with fromJSON.
+    #
+    #   derecho -> leap x {oneapi, gcc14, nvhpc} x {mpich, openmpi}, x86_64,
+    #              nogpu = 6 jobs.  gcc14 rather than gcc because Derecho's
+    #              module is gcc/14.3.0 and the point of the sweep is
+    #              comparability with a native build.
+    #   full    -> every combination, as matrix-build-images.yaml.
+    #
+    # Narrowing the axes rather than filtering with a job-level `if:` is not a
+    # style choice: the `matrix` context is NOT available to `jobs.<id>.if`
+    # (only github/needs/vars/inputs are), so an if: referring to matrix.* is a
+    # workflow syntax error.  `strategy` does have the inputs context, which is
+    # what makes this work -- and it yields exactly 6 real jobs instead of 6
+    # running plus 58 skipped.
+    #
+    # The include:/exclude: blocks below stay static and serve both sets.
+    #---------------------------------------------------------------------------
     strategy:
       fail-fast: false
       max-parallel: 16
       matrix:
-        compiler: [nvhpc, oneapi, aocc, gcc, gcc12, gcc14, gcc15, gcc16]
+        compiler: ${{ fromJSON(inputs.image_set == 'derecho'
+                     && '["oneapi","gcc14","nvhpc"]'
+                     || '["nvhpc","oneapi","aocc","gcc","gcc12","gcc14","gcc15","gcc16"]') }}
         mpi: [openmpi, mpich]
-        gpu: [nogpu, cuda]
-        arch: [x86_64, aarch64]
+        gpu: ${{ fromJSON(inputs.image_set == 'derecho' && '["nogpu"]' || '["nogpu","cuda"]') }}
+        arch: ${{ fromJSON(inputs.image_set == 'derecho' && '["x86_64"]' || '["x86_64","aarch64"]') }}
 
         include:
           # gpu architecture-dependent build arg specifications
@@ -203,7 +216,8 @@ jobs:
 
     uses: ./.github/workflows/build-hpc-dev-image-ghcr.yaml
     with:
-      docker_repo: ${{ inputs.docker_repo }}
+      docker_repo: ${{ inputs.docker_repo != '' && inputs.docker_repo
+                       || format('ghcr.io/{0}/hpcdev', github.repository_owner) }}
       os: ${{ inputs.os }}
       arch: ${{ matrix.arch }}
       runner: ${{ matrix.arch == 'x86_64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
