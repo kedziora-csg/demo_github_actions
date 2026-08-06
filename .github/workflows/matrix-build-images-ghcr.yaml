@@ -9,21 +9,16 @@ name: Build HPC Development Images (GHCR)
 #   * uses:        -> build-hpc-dev-image-ghcr.yaml
 #   * secrets:     -> registry_token (GITHUB_TOKEN) instead of dockerhub_token
 #   * permissions: -> packages: write, so GITHUB_TOKEN may push to GHCR
-#   * docker_repo  -> GHCR namespaces
-#   * image_set    -> new input; see below
+#   * docker_repo  -> GHCR namespaces, owner resolved in the with: block
+#
+# For the six-image Derecho deployment set, use derecho-images-ghcr.yaml.
+# Narrowing THIS matrix is not an option: the include: blocks below name
+# compilers/arches outside any narrowed axis set, and GitHub turns each
+# non-matching include into a malformed standalone job (see CLAUDE.md).
 
 on:
   workflow_dispatch:
     inputs:
-      image_set:
-        description: "Which combinations to build"
-        type: choice
-        required: true
-        default: derecho
-        options:
-          - derecho
-          - full
-
       os:
         description: "Base OS"
         type: choice
@@ -68,34 +63,14 @@ permissions:
 jobs:
   build-matrix:
     name: Build
-    #---------------------------------------------------------------------------
-    # image_set selects the AXIS VALUES, evaluated with fromJSON.
-    #
-    #   derecho -> leap x {oneapi, gcc14, nvhpc} x {mpich, openmpi}, x86_64,
-    #              nogpu = 6 jobs.  gcc14 rather than gcc because Derecho's
-    #              module is gcc/14.3.0 and the point of the sweep is
-    #              comparability with a native build.
-    #   full    -> every combination, as matrix-build-images.yaml.
-    #
-    # Narrowing the axes rather than filtering with a job-level `if:` is not a
-    # style choice: the `matrix` context is NOT available to `jobs.<id>.if`
-    # (only github/needs/vars/inputs are), so an if: referring to matrix.* is a
-    # workflow syntax error.  `strategy` does have the inputs context, which is
-    # what makes this work -- and it yields exactly 6 real jobs instead of 6
-    # running plus 58 skipped.
-    #
-    # The include:/exclude: blocks below stay static and serve both sets.
-    #---------------------------------------------------------------------------
     strategy:
       fail-fast: false
       max-parallel: 16
       matrix:
-        compiler: ${{ fromJSON(inputs.image_set == 'derecho'
-                     && '["oneapi","gcc14","nvhpc"]'
-                     || '["nvhpc","oneapi","aocc","gcc","gcc12","gcc14","gcc15","gcc16"]') }}
+        compiler: [nvhpc, oneapi, aocc, gcc, gcc12, gcc14, gcc15, gcc16]
         mpi: [openmpi, mpich]
-        gpu: ${{ fromJSON(inputs.image_set == 'derecho' && '["nogpu"]' || '["nogpu","cuda"]') }}
-        arch: ${{ fromJSON(inputs.image_set == 'derecho' && '["x86_64"]' || '["x86_64","aarch64"]') }}
+        gpu: [nogpu, cuda]
+        arch: [x86_64, aarch64]
 
         include:
           # gpu architecture-dependent build arg specifications

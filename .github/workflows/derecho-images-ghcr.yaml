@@ -1,0 +1,143 @@
+name: Build Derecho Image Set (GHCR)
+
+#-------------------------------------------------------------------------------
+# The blessed Derecho deployment set, published to GHCR:
+#
+#     leap x {oneapi, gcc14, nvhpc} x {mpich, openmpi}  = 6 images
+#
+#   leap    -- openSUSE Leap 15 is built from the same SLE 15 SP6 sources as
+#              Derecho's host OS, so the container userspace matches the host.
+#   oneapi  -- intel/2025.2.1 is the site default compiler.
+#   gcc14   -- matches Derecho's gcc/14.3.0 module exactly (NOT `gcc`, which is
+#              leap's system compiler).
+#   nvhpc   -- the third compiler NCAR provides modules for.
+#   mpich   -- only MPICH can be displaced by Cray MPICH's ABI shim.
+#   openmpi -- the alternative, still unproven on Derecho.
+#
+# Consumed by containers/deploy/ncar-hpc: libexec/Makefile's `derecho` target
+# builds the matching .sif files, and submit_placement_matrix.sh runs the sweep.
+#
+# WHY THIS IS A SEPARATE FILE, not a preset inside matrix-build-images-ghcr.yaml:
+# narrowing that workflow's axes orphans its include: blocks.  GitHub turns every
+# include entry that matches no surviving combination into a malformed standalone
+# job -- with no arch, so the runner ternary sends it to a scarce ARM runner where
+# it queues forever.  Narrowing to these 6 produced 6 real jobs plus 8 orphans.
+# Here the axes and the include: entries are defined together, so they cannot
+# drift apart.
+#
+# The compiler/mpi build args below MIRROR matrix-build-images.yaml, which is the
+# authoritative source for versions.  Keep them in sync when bumping.
+#-------------------------------------------------------------------------------
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: "Base OS (leap matches Derecho's SLE 15 SP6 host)"
+        type: choice
+        required: true
+        default: leap
+        options:
+          - leap
+          - almalinux9
+          - noble
+
+      docker_repo:
+        description: "Container repository (blank = ghcr.io/<this repo's owner>/hpcdev)"
+        type: string
+        required: false
+        default: ""
+
+      test:
+        description: "Test Image"
+        type: boolean
+        required: false
+        default: true
+
+      publish:
+        description: "Publish Image"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-derecho-set:
+    name: Build
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        compiler: [oneapi, gcc14, nvhpc]
+        mpi: [mpich, openmpi]
+
+        # Every include below names a value that EXISTS in the axes above, so
+        # each one merges rather than creating a standalone job.  Adding a
+        # compiler here means adding it to the axis list too.
+        include:
+          - compiler: oneapi
+            compiler_build_args: |
+              COMPILER_FAMILY=oneapi
+              ONEAPI_VERSION=2026.0.0
+              ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e2f4cda3-8891-4d0e-bf60-00d19c4e3e27/intel-dpcpp-cpp-compiler-2026.0.0.564_offline.sh
+              ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/176ca159-bee8-44f2-9164-db26f95de382/intel-fortran-compiler-2026.0.0.573_offline.sh
+
+          - compiler: gcc14
+            compiler_build_args: |
+              COMPILER_FAMILY=gcc
+              GCC_VERSION=14.3.0
+
+          # -tp=x86-64-v3, not -march=: nvc silently ignores GNU's -march and
+          # would otherwise target the build runner's CPU, producing a binary
+          # that SIGILLs on Derecho.
+          - compiler: nvhpc
+            compiler_build_args: |
+              COMPILER_FAMILY=nvhpc
+              MARCH_FLAGS=-tp=x86-64-v3
+              NVHPC_VERSION=26.5
+              NVHPC_URL=https://developer.download.nvidia.com/hpc-sdk/26.5/nvhpc_2026_265_Linux_x86_64_cuda_multi.tar.gz
+
+          - mpi: openmpi
+            mpi_build_args: |
+              MPI_FAMILY=openmpi
+              OPENMPI_VERSION=5.0.10
+
+          - mpi: mpich
+            mpi_build_args: |
+              MPI_FAMILY=mpich
+              MPICH_VERSION=5.0.1
+
+    uses: ./.github/workflows/build-hpc-dev-image-ghcr.yaml
+    with:
+      docker_repo: ${{ inputs.docker_repo != '' && inputs.docker_repo
+                       || format('ghcr.io/{0}/hpcdev', github.repository_owner) }}
+      os: ${{ inputs.os }}
+      # Derecho CPU nodes are x86_64 and this set is CPU-only; GPU images are a
+      # later axis (they need --nv, set_gpu_rank and an ngpus PBS select line).
+      arch: x86_64
+      runner: ubuntu-latest
+      free_runner_space: true
+      conda: true
+      gpu: nogpu
+      compiler: ${{ matrix.compiler }}
+      compiler_build_args: ${{ matrix.compiler_build_args }}
+      mpi: ${{ matrix.mpi }}
+      mpi_build_args: ${{ matrix.mpi_build_args }}
+      test: ${{ inputs.test }}
+      publish: ${{ inputs.publish }}
+      extra_build_args: |
+        HDF5_VERSION=1.14.5
+        HDF5_URL=https://github.com/HDFGroup/hdf5/releases/download/hdf5_1.14.5/hdf5-1.14.5.tar.gz
+        NETCDF_C_VERSION=4.10.0
+        NETCDF_FORTRAN_VERSION=4.6.3
+        PNETCDF_VERSION=1.14.1
+        PIO_VERSION=2.6.7
+        PIO_TAG=pio2_6_7
+        FFTW_VERSION=3.3.10
+        HEFFTE_VERSION=2.4.1
+
+    secrets:
+      registry_token: ${{ secrets.GITHUB_TOKEN }}
