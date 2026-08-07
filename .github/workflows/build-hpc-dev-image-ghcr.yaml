@@ -250,7 +250,7 @@ jobs:
           PUBLISH_TAG=${PUBLISH_REPO}:${{ inputs.os }}${COMPILER_LABEL}${MPI_LABEL}${GPU_LABEL}-latest
           PUBLISH_TAG_YYMM=${PUBLISH_TAG//-latest/-$(date +%y.%m)}
           #PUBLISH_TAG_YYMM=${PUBLISH_TAG//-latest/-25.09}
-          CI_REPO=${PUBLISH_REPO}-cache
+          CI_REPO=${PUBLISH_REPO}
           CI_TAG=${CI_REPO}:${{ inputs.os }}${COMPILER_LABEL}${MPI_LABEL}${GPU_LABEL}-${INPUTS_SHA}
           CI_CACHE=${CI_TAG//-${INPUTS_SHA}/-cache}
 
