@@ -42,12 +42,6 @@ on:
           - almalinux9
           - noble
 
-      docker_repo:
-        description: "Container repository (blank = ghcr.io/<this repo's owner>/hpcdev)"
-        type: string
-        required: false
-        default: ""
-
       test:
         description: "Test Image"
         type: boolean
@@ -112,8 +106,12 @@ jobs:
 
     uses: ./.github/workflows/build-hpc-dev-image-ghcr.yaml
     with:
-      docker_repo: ${{ inputs.docker_repo != '' && inputs.docker_repo
-                       || format('ghcr.io/{0}/hpcdev', github.repository_owner) }}
+      # docker_repo deliberately NOT passed: the callee defaults to
+      # ghcr.io/${{ github.repository_owner }}/hpcdev, which is the only correct
+      # destination for this workflow.  A free-text field here was previously
+      # filled in as "kedziora", which is an unqualified name -- Docker resolves
+      # those to Docker Hub's library/ namespace, so the build succeeded and then
+      # failed pushing cache to library/kedziora-x86_64-cache with a 401.
       os: ${{ inputs.os }}
       # Derecho CPU nodes are x86_64 and this set is CPU-only; GPU images are a
       # later axis (they need --nv, set_gpu_rank and an ngpus PBS select line).

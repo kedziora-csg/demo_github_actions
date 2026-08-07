@@ -197,6 +197,28 @@ jobs:
       #----------------------------------------------
       # Build image
       #----------------------------------------------
+      - name: Validate docker_repo
+        run: |
+          repo='${{ inputs.docker_repo }}'
+          # Every tag in this workflow -- including the buildx registry cache --
+          # is derived as ${docker_repo}-${arch}[-cache].  An unqualified name
+          # (no registry host) is resolved by Docker to Docker Hub's library/
+          # namespace, where GITHUB_TOKEN cannot authenticate.  That failure
+          # surfaces only at the cache-push step, i.e. AFTER a ~20 minute build,
+          # as a bare "401 Unauthorized" against library/<name>-<arch>-cache.
+          # Catch it in two seconds instead.
+          case "${repo}" in
+              ghcr.io/*/*) echo "docker_repo=${repo}  OK" ;;
+              *)
+                  echo "::error::docker_repo must be a fully qualified GHCR path:"
+                  echo "::error::  expected  ghcr.io/<owner>/<name>"
+                  echo "::error::  got       '${repo}'"
+                  echo "::error::Leave the input blank to use the default,"
+                  echo "::error::ghcr.io/${{ github.repository_owner }}/hpcdev"
+                  exit 1
+                  ;;
+          esac
+
       - name: Set Image Build Environment & Tag Variables
         run: |
           COMPILER_LABEL="-${{ inputs.compiler == 'os-gcc' && 'gcc' || inputs.compiler }}"
