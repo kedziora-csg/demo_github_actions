@@ -678,7 +678,16 @@ FROM toolkits AS oneapi
 # Intel compilers do not -rpath their own libraries, relying instead on LD_LIBRARY_PATH
 # We'd rather not need that, so add to the system search path
 #
-# Use the OneAPI Toolkit offline installer (contains both C++ and Fortran compilers).
+# Use an OneAPI offline installer that ships BOTH icx and ifx.  Which bundle that
+# is depends on the release, and the filenames are a trap:
+#   <= 2025.x  three SKUs.  `intel-oneapi-base-toolkit-*` has icx but NO ifx;
+#              `intel-oneapi-hpc-toolkit-*` is the one to use.
+#   >= 2026.0  Base and HPC were merged into a single "Intel oneAPI Toolkit", so
+#              `intel-oneapi-toolkit-*` (no base/hpc infix) is the merged bundle
+#              and is correct -- it is NOT the old Base Toolkit.
+# Picking a base-toolkit URL does not fail here: `which ifx` just comes back empty,
+# FC silently degrades to gfortran, and the build dies much later linking HDF5.
+# The guard below turns that into an immediate, self-describing failure.
 ARG ONEAPI_VERSION=2026.1.0
 ARG ONEAPI_TOOLKIT_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/33cb2a22-ddf1-4aa9-8d68-1f5a118acaf2/intel-oneapi-toolkit-2026.1.0.192_offline.sh
 RUN exec &> >(tee /container/logs/oneapi.log) \
@@ -697,6 +706,7 @@ RUN exec &> >(tee /container/logs/oneapi.log) \
     && add_conf "export ONEAPI_VERSION=${ONEAPI_VERSION}" \
     && add_conf "source ${ONEAPI_INSTALL_PATH}/setvars.sh --force >/dev/null 2>&1" \
     && source /container/config_env.sh \
+    && for _t in icx icpx ifx; do command -v ${_t} >/dev/null || { echo "ERROR: '${_t}' not found after installing OneAPI ${ONEAPI_VERSION}. ONEAPI_TOOLKIT_URL must point at a bundle shipping BOTH the C/C++ and Fortran compilers (HPC Toolkit or the unified 2026+ toolkit). The Base Toolkit has icx but no ifx, and 'which ifx' failing here would silently leave FC empty -> gfortran."; exit 1; }; done \
     && add_conf "export oneapi_CC=$(which icx) && export CC=\${oneapi_CC}" \
     && add_conf "export oneapi_CXX=$(which icpx) && export CXX=\${oneapi_CXX}" \
     && add_conf "export oneapi_F77=$(which ifx) && export F77=\${oneapi_F77}" \
