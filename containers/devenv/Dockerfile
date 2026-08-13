@@ -678,18 +678,16 @@ FROM toolkits AS oneapi
 # Intel compilers do not -rpath their own libraries, relying instead on LD_LIBRARY_PATH
 # We'd rather not need that, so add to the system search path
 #
-# Install and remove C++, Fortran one at a time as we go for when disk space is tight, rather than downloading both installers at once.
-ARG ONEAPI_VERSION=2026.0.0
-ARG ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e2f4cda3-8891-4d0e-bf60-00d19c4e3e27/intel-dpcpp-cpp-compiler-2026.0.0.564_offline.sh
-ARG ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/176ca159-bee8-44f2-9164-db26f95de382/intel-fortran-compiler-2026.0.0.573_offline.sh
+# Use the OneAPI Toolkit offline installer (contains both C++ and Fortran compilers).
+ARG ONEAPI_VERSION=2026.1.0
+ARG ONEAPI_TOOLKIT_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/33cb2a22-ddf1-4aa9-8d68-1f5a118acaf2/intel-oneapi-toolkit-2026.1.0.192_offline.sh
 RUN exec &> >(tee /container/logs/oneapi.log) \
     && echo "Installing Intel-OneAPI" \
     && echo "Intel OneAPI: https://www.intel.com/content/www/us/en/content-details/777700/intel-end-user-license-agreement-for-developer-tools-august-2024.html" >> /container/EULAs.txt \
     && ONEAPI_INSTALL_PATH="/container/intel-oneapi" \
     && mkdir -p /tmp/intel_installers && cd /tmp/intel_installers \
     && installer_opts="-a -s --eula accept --install-dir ${ONEAPI_INSTALL_PATH} --ignore-errors" \
-    && curl --retry 3 --retry-delay 5 -s ${ONEAPI_CC_URL} -o cpp-installer.sh && ls -ltrh cpp-installer.sh && chmod +x ./cpp-installer.sh && ./cpp-installer.sh ${installer_opts} && rm -rf cpp-installer.sh \
-    && curl --retry 3 --retry-delay 5 -s ${ONEAPI_FC_URL} -o fortran-installer.sh && ls -ltrh fortran-installer.sh && chmod +x ./fortran-installer.sh && ./fortran-installer.sh ${installer_opts} && rm -rf fortran-installer.sh \
+    && curl --retry 3 --retry-delay 5 -s ${ONEAPI_TOOLKIT_URL} -o oneapi-toolkit-installer.sh && ls -ltrh oneapi-toolkit-installer.sh && chmod +x ./oneapi-toolkit-installer.sh && ./oneapi-toolkit-installer.sh ${installer_opts} && rm -rf oneapi-toolkit-installer.sh \
     && cd ${ONEAPI_INSTALL_PATH} \
     && rm_paths="mpi debugger conda_channel compiler/*/linux/lib/oclfpga /opt/intel" \
     && echo "Removing extra bloat: ${rm_paths}" > README.whered_stuff_go && (du -hs ${rm_paths} >> README.whered_stuff_go || true) && cat README.whered_stuff_go \
