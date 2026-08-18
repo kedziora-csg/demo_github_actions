@@ -43,13 +43,13 @@ on:
           - noble
 
       oneapi_version:
-        description: "oneAPI version -- 2026.1.0 is UNTESTED, see the oneapi entry below"
+        description: "oneAPI version -- 2026.1.0 is the validated default, 2025.3.2 the fallback"
         type: choice
         required: true
-        default: "2025.3.2"
+        default: "2026.1.0"
         options:
-          - "2025.3.2"
           - "2026.1.0"
+          - "2025.3.2"
 
       test:
         description: "Test Image"
@@ -81,12 +81,12 @@ jobs:
         # each one merges rather than creating a standalone job.  Adding a
         # compiler here means adding it to the axis list too.
         include:
-          # oneAPI version is dispatch-selectable so 2026.1.0 can be tried on
-          # Derecho without editing this file.  2025.3.2 is the default and the
-          # only version confirmed good: 2026.0.0 miscompiles HPCG's threaded
-          # nonzero count (CheckProblem.cpp:146 assertion, reproduces at one rank
-          # under pure OpenMP), and 2026.1.0 has never been run -- establishing
-          # that is exactly what the option is for.
+          # oneAPI version is dispatch-selectable so a suspect release can be A/B'd
+          # on Derecho without editing this file.  2026.1.0 is the default and is
+          # validated there: 2026.0.0 miscompiled HPCG's threaded nonzero count
+          # (CheckProblem.cpp:146 assertion, reproducing at one rank under pure
+          # OpenMP) and 2026.1.0 clears it.  2025.3.2 is the last pre-2026 release
+          # known good, kept as the fallback.
           #
           # BOTH component installers are required and must move together: the
           # dpcpp one supplies icx/icpx, the fortran one supplies ifx.  Drop

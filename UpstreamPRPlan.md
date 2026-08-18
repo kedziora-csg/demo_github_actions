@@ -1,27 +1,29 @@
 # Plan: What To Send Upstream, And What To Keep In The Fork
 
-Status: **proposal.** Nothing has been branched, cherry-picked, or pushed.
+Status: **PR 1 is branched and committed locally, not pushed. PR 2 is still a proposal.**
 
 Handoff note for a future session. It records the fork/upstream split decision while it is
 fresh, so the next session starts from a decision instead of re-deriving one.
 
 Companion to [BenchmarkRunnerPlan.md](BenchmarkRunnerPlan.md); see §5 for how the two
-interact. Short version: **one small fix in §3 should land before benchmark work; neither
-PR is a prerequisite.**
+interact. Short version: **§3 is done; neither PR is a prerequisite for benchmark work.**
+
+Revised 2026-08-18. The oneAPI direction reversed since the first draft — see §3 — so §3
+and §4 were rewritten. §2 Bucket B, §5 and most of §6 are unchanged.
 
 ---
 
 ## 1. Facts
 
-Measured 2026-08-17, after `git fetch upstream`.
+Measured 2026-08-18, after `git fetch upstream`.
 
 | | |
 |---|---|
 | Fork | `kedziora-csg/demo_github_actions` (`origin`) |
 | Upstream | `benkirk/demo_github_actions` (`upstream`), default branch `main` |
-| Divergence | **76 commits ahead, 0 behind** `upstream/main` |
+| Divergence | **77 commits ahead, 0 behind** `upstream/main` |
 | Merge base | `f471750` — "June refresh (#31)", 2026-06-26 |
-| Total diff | 41 files, +6975 / −47 |
+| Total diff | 44 files, +8002 / −50 |
 | PR target | `benkirk:main` — upstream merges PRs there (`#31`) |
 | Other upstream branches | `cuda13`, `comprehend/workflow-dependency-auto-refresh` |
 
@@ -29,7 +31,7 @@ Two consequences worth noting:
 
 - **Zero commits behind** means any topic branch cut from `upstream/main` applies without a
   rebase, and there is no upstream drift creating time pressure. Upstream has been idle for
-  seven weeks.
+  eight weeks.
 - We also hold `comprehend/workflow-dependency-auto-refresh` **8 ahead** of upstream's copy
   of the same branch. That is a separate collaboration track with its own history; it is
   out of scope here and should not be folded into either PR below.
@@ -38,14 +40,14 @@ Two consequences worth noting:
 
 ## 2. The split
 
-Roughly 1,775 of the 6,975 added lines are plausibly upstream's. The rest is fork
+Roughly 1,800 of the 8,002 added lines are plausibly upstream's. The rest is fork
 infrastructure and design work.
 
 ### Bucket A — send upstream
 
 | Change | Files | Why it is upstream's |
 |---|---|---|
-| **oneAPI unified toolkit + `ifx` guard** | `containers/devenv/Dockerfile` (oneapi stage) | Fixes a live trap in upstream's tree, not a preference |
+| **oneAPI 2026.1.0 bump + compiler guard** | `containers/devenv/Dockerfile` (oneapi stage), `.github/workflows/{devel-build-images,matrix-build-images}.yaml` | Upstream's 2026.0.0 default miscompiles HPCG under OpenMP; the guard catches a silent half-install |
 | **`report_placement` smoke diagnostic** | `scripts/report_placement.cxx`, `src/report_placement.cxx`, `scripts/build_report-placement.sh`, `containers/test/Dockerfile`, `.github/workflows/{container-build,devel-build-images,matrix-smoketest-applications,build-hpc-development-image}.yaml`, `containers/devenv/Dockerfile` (final stage) | Strictly better image validation, applies to every image upstream builds |
 
 ### Bucket B — keep in the fork
@@ -67,71 +69,155 @@ infrastructure and design work.
 
 ---
 
-## 3. Blocker: the oneAPI build-args are half migrated
+## 3. Resolved: the oneAPI scheme reversed, and the build-args agree again
 
-`35d6f51` and `3d5e2de` renamed the Dockerfile's oneAPI ARGs from
-`ONEAPI_CC_URL` + `ONEAPI_FC_URL` to a single `ONEAPI_TOOLKIT_URL`
-([Dockerfile:691-692](containers/devenv/Dockerfile#L691-L692)). Only one of the four
-consumers was updated.
+**This section was the blocker. It is done.** What follows is the record of what changed
+and why, because the reasoning is not recoverable from the diff.
 
-| Workflow | Passes | Declared? | Actually installs | Stamps into `config_env.sh` |
+### The reversal
+
+The first draft proposed collapsing the two per-language oneAPI installer URLs into a
+single `ONEAPI_TOOLKIT_URL` (commits `35d6f51`, `3d5e2de`). That direction was abandoned on
+2026-08-18 and the **two-URL component scheme is back**:
+
+- `ONEAPI_CC_URL` — `intel-dpcpp-cpp-compiler-*`, supplies `icx`/`icpx`
+- `ONEAPI_FC_URL` — `intel-fortran-compiler-*`, supplies `ifx`
+
+Reasons, in order of weight:
+
+1. **Upstream never followed.** `upstream/main` still declares `ONEAPI_CC_URL` +
+   `ONEAPI_FC_URL` at 2026.0.0. The toolkit collapse was a fork-only detour, so reverting it
+   makes the PR *smaller* — the scheme is no longer part of the diff at all.
+2. **The toolkit default was never tested.** `2026.1.0` was originally picked because it was
+   the installer on Intel's download page that paired with the 2025.3.2 components, not
+   because anything had been run against it.
+3. **URL provenance now has a source of truth.** Spack's `intel_oneapi_compilers`
+   `package.py` carries a `cpp` and an `ftn` URL per release. Intel embeds an opaque
+   per-release UUID that cannot be derived from the version number, so a bump means copying
+   both URLs from Spack — editing the version inside an existing URL yields a 404. Recorded
+   in the Dockerfile comment.
+4. **Disk.** Two components are fetched, installed and deleted one at a time (1.0 GB +
+   0.8 GB, never coexisting); the merged toolkit is a single 2.6 GB download.
+
+### The half-migration is gone
+
+The four-consumer table in the previous draft — three workflows passing undeclared
+build-args while stamping a version they were not installing — no longer applies. The
+Dockerfile declares both ARGs again and every consumer passes them:
+
+| Workflow | Passes | Declared? | Installs | Stamps |
 |---|---|---|---|---|
-| `derecho-images-ghcr.yaml:78,83` | `ONEAPI_TOOLKIT_URL` 2025.3.1 | yes | 2025.3.1 | 2025.3.1 ✅ |
-| `devel-build-images.yaml:42-44` | `ONEAPI_CC_URL`, `ONEAPI_FC_URL` | **no** | 2026.1.0 (default) | **2025.2.1** ❌ |
-| `matrix-build-images.yaml:98-100` | `ONEAPI_CC_URL`, `ONEAPI_FC_URL` | **no** | 2026.1.0 (default) | **2026.0.0** ❌ |
-| `matrix-build-images-ghcr.yaml:117-119` | `ONEAPI_CC_URL`, `ONEAPI_FC_URL` | **no** | 2026.1.0 (default) | **2025.2.1** ❌ |
+| `matrix-build-images.yaml` | CC+FC URLs | yes | 2026.1.0 | 2026.1.0 ✅ |
+| `devel-build-images.yaml` | CC+FC URLs | yes | 2026.1.0 | 2026.1.0 ✅ |
+| `matrix-build-images-ghcr.yaml` | CC+FC URLs | yes | 2026.1.0 | 2026.1.0 ✅ |
+| `derecho-images-ghcr.yaml` | CC+FC URLs, from a dispatch input | yes | selected | selected ✅ |
 
-Undeclared build-args are a buildx **warning**, not an error, so three of four oneAPI
-consumers silently install the Dockerfile default while recording a different version. This
-breaks the invariant `CLAUDE.md` states directly:
+The `CLAUDE.md` invariant — the CI matrices are the authoritative versions — holds again,
+so `BenchmarkRunnerPlan.md` §7 provenance rows can trust in-image `ONEAPI_VERSION`.
 
-> the **real, authoritative versions are the CI matrices**, which override the ARGs via
-> build-args
+### DECISION A — answered: 2026.1.0 everywhere
 
-**Fix, before anything else:** in each of the three lagging workflows, replace the two URL
-lines with one `ONEAPI_TOOLKIT_URL` and make `ONEAPI_VERSION` agree with it. Decide per
-workflow which oneAPI is actually wanted — `devel-build-images.yaml` and
-`matrix-build-images.yaml` are upstream-shared files, so whatever lands there is also the
-PR content; `matrix-build-images-ghcr.yaml` is fork-only.
+Not a preference. **oneAPI 2026.0.0, upstream's current default, miscompiles HPCG.** On
+Derecho, in the `leap-oneapi-*` images:
 
-Also confirm the intended default. The Dockerfile default is now the merged 2026.1.0
-toolkit, while `derecho-images-ghcr.yaml` deliberately pins the 2025.3.1 **HPC** toolkit —
-per `CLAUDE.md`, the Derecho site default is `intel/2025.2.1`, so the Derecho pin is
-intentional. Is 2026.1.0 the right default for everything else, or should the default track
-the Derecho pin?
+```
+xhpcg: CheckProblem.cpp:146: Assertion `A.totalNumberOfNonzeros == totalNumberOfNonzeros' failed.
+```
 
-**DECISION A:** which oneAPI version does each of the three workflows want?
+OpenMP threading is the common factor: it fails in hybrid MPI+OpenMP *and* in pure OpenMP on
+a single rank, so MPI is not involved. At one rank no MPI reduction feeds that number — HPCG
+accumulates `localNumberOfNonzeros` inside an OpenMP-parallel region in `GenerateProblem` —
+so the threaded count itself is wrong. Clean bare-metal, and clean under the other compilers
+in the same image set.
+
+**2026.1.0 clears it, verified on Derecho.** 2025.3.2 is the last pre-2026 release known
+good and is kept as the fallback option in `derecho-images-ghcr.yaml`, which grew a
+`oneapi_version` dispatch input so a suspect release can be A/B'd without editing a file.
+
+### The guard
+
+The Dockerfile now checks `icx`, `icpx` and `ifx` immediately after `setvars.sh`. With two
+independent installers either can fail to deliver its compiler without failing the build:
+`which` returns empty, that `CC`/`CXX`/`FC` is exported empty, and autoconf and cmake fall
+through to the base image's GNU toolchain, present on every `base_os`. The quiet direction
+is the dangerous one:
+
+- **no `ifx`** — dies much later linking Intel-compiled C against a GNU-driven `mpifort`.
+- **no `icx`** — does not die at all. gcc-built C and ifx-built Fortran link happily, so the
+  build goes green and publishes a GNU-built image labelled `oneapi`.
 
 ---
 
 ## 4. The two PRs
 
-### PR 1 — oneAPI: one toolkit URL, and fail loudly when `ifx` is missing
+### PR 1 — oneAPI: bump to 2026.1.0, and fail loudly when a compiler is missing
 
-**Source commits:** `35d6f51`, `3d5e2de`. Both touch only
-`containers/devenv/Dockerfile` and `derecho-images-ghcr.yaml`, so a cherry-pick is clean
-once the fork-only workflow hunk is dropped.
+**Status: branch built and committed, not pushed.** `oneapi-2026.1.0` @ `9873d9d`, one
+commit on top of `upstream/main`.
+
+**Do not cherry-pick.** `35d6f51` and `3d5e2de` implement the toolkit collapse — the
+opposite of what shipped — so replaying them applies a change that then has to be reverted.
+The branch was built from the *final tree*:
 
 ```bash
-git checkout -b upstream/oneapi-single-toolkit upstream/main
-git cherry-pick 35d6f51 3d5e2de           # then drop the derecho-images-ghcr.yaml hunks
-# add the reconciliation of devel-build-images.yaml + matrix-build-images.yaml (§3)
+git worktree add <scratch>/pr-oneapi -b oneapi-2026.1.0 upstream/main   # dirty main untouched
+cp <the 3 files from main's working tree> <scratch>/pr-oneapi/
+# strip the report_placement hunks -- the Dockerfile final stage, and the
+# devel-build-images.yaml hello_world -> report_placement rename.  Those are PR 2.
+git add containers/devenv/Dockerfile .github/workflows/{devel,matrix}-build-images.yaml
+git commit
 ```
 
-Proposed description, from the comment block already in the Dockerfile:
+A worktree rather than `git checkout -b` because `main` carries uncommitted work that
+`checkout` would drag onto the new branch. The branch lives in the shared `.git`, so it
+survives removing the worktree directory.
 
-> The oneAPI offline-installer filenames are a trap. Through 2025.x, three SKUs exist and
-> `intel-oneapi-base-toolkit-*` has `icx` but **no `ifx`** — `intel-oneapi-hpc-toolkit-*`
-> is the one to use. From 2026.0, Base and HPC were merged, so `intel-oneapi-toolkit-*`
-> (no infix) is the merged bundle and *is* correct.
+**Scope — 3 files, 4 hunks**, verified with `git diff --stat upstream/main` (that diff *is*
+the PR):
+
+| File | Hunks |
+|---|---|
+| `containers/devenv/Dockerfile` | ARG block + comments; the `icx`/`icpx`/`ifx` guard |
+| `.github/workflows/matrix-build-images.yaml` | oneapi include entry |
+| `.github/workflows/devel-build-images.yaml` | oneapi include entry |
+
+Deliberately excluded: `report_placement` (PR 2) and both `*-ghcr.yaml` workflows (Bucket B).
+
+To submit:
+
+```bash
+git push -u origin oneapi-2026.1.0
+gh pr create --repo benkirk/demo_github_actions \
+  --base main --head kedziora-csg:oneapi-2026.1.0 \
+  --title "oneapi: bump to 2026.1.0, and fail the build when a compiler is missing"
+```
+
+Proposed description — the durable copy; a longer draft lives in session scratch, which is
+ephemeral:
+
+> **What** — bumps the oneAPI compilers from 2026.0.0 to 2026.1.0, and adds an
+> `icx`/`icpx`/`ifx` presence check to the oneapi stage.
 >
-> Picking a base-toolkit URL does not fail at install time: `which ifx` comes back empty,
-> `FC` silently degrades to gfortran, and the build dies much later linking HDF5. This
-> collapses the two URLs into one `ONEAPI_TOOLKIT_URL` and adds an `icx`/`icpx`/`ifx`
-> presence check right after `setvars.sh`, turning a confusing late failure into an
-> immediate, self-describing one.
+> **Why the bump** — HPCG built with the current 2026.0.0 default aborts on NCAR's Derecho
+> at `CheckProblem.cpp:146`, `Assertion 'A.totalNumberOfNonzeros == totalNumberOfNonzeros'`.
+> OpenMP threading is the common factor: it fails in hybrid MPI+OpenMP and in pure OpenMP on
+> a single rank, so MPI is not implicated — at one rank no MPI reduction feeds that number,
+> and HPCG accumulates `localNumberOfNonzeros` inside an OpenMP-parallel region in
+> `GenerateProblem`, so the threaded count itself is wrong. Clean bare-metal and clean under
+> the other compilers in the same image set. 2026.1.0 clears it, verified on Derecho.
+>
+> **Why the guard** — the stage installs two independent component installers; if either
+> fails to deliver its compiler the build does not fail. `CC`/`CXX`/`FC` is exported empty
+> and autoconf/cmake fall through to the base image's gcc/g++/gfortran. A missing `ifx` dies
+> later linking against a GNU-driven `mpifort`; a missing `icx` does not die at all and
+> publishes a GNU-built image labelled `oneapi`. The guard fails immediately, naming the
+> installer at fault.
+>
+> **URL provenance** — the URLs are Spack's, from the `cpp`/`ftn` entries of
+> `intel_oneapi_compilers/package.py`. Intel's per-release UUID cannot be derived from the
+> version number, so a bump means copying both fresh URLs from there.
 
-Low risk, self-contained, fixes a real failure mode. Send this one first.
+Low risk, self-contained, fixes a live miscompile in upstream's default. Send this first.
 
 ### PR 2 — `report_placement`: a placement-aware replacement for the MPI hello-world
 
@@ -183,16 +269,22 @@ Two things to get right:
 
 ## 5. Sequencing against the benchmark runner plan
 
-**Only §3 is a prerequisite. Neither PR is.**
+**§3 was the only prerequisite, and it is done. Neither PR is blocking.**
 
-### Do §3 first
+### §3 is done
 
-Not for the PR's sake — because it corrupts the benchmark results the other plan is built
-to produce. `BenchmarkRunnerPlan.md` §7 records `compiler` and image identity in every
-result row, and the in-image `ONEAPI_VERSION` from `config_env.sh` is where that provenance
-comes from. Benchmarking oneAPI images that claim 2025.2.1 while running 2026.1.0 puts a
-wrong compiler version on every oneAPI row in the results table — exactly the kind of
-silent mislabelling the results contract exists to prevent. It is a ~20 minute fix.
+It mattered for the benchmark plan, not for the PR: `BenchmarkRunnerPlan.md` §7 records
+`compiler` and image identity in every result row, and the in-image `ONEAPI_VERSION` from
+`config_env.sh` is where that provenance comes from. While the build-args were half
+migrated, oneAPI images claimed one version and ran another, which would have put a wrong
+compiler version on every oneAPI row. All four consumers now agree — see the §3 table — so
+benchmark provenance is trustworthy.
+
+One consequence to carry forward: the oneAPI images published before 2026-08-18 were built
+with the 2026.1.0 *toolkit* while labelled 2025.2.1 or 2026.0.0. **Any results measured
+against those images have the wrong compiler version recorded and should be re-run**, not
+just relabelled — the binaries themselves came from a different compiler than the row
+claims.
 
 ### The PRs are not blocking
 
@@ -226,11 +318,12 @@ Q7 without sending PR 2.
 
 ### Suggested order
 
-1. **§3 oneAPI reconciliation** — now, before benchmark work. Fork-local, no PR needed.
+1. ~~**§3 oneAPI reconciliation**~~ — **done 2026-08-18.**
 2. **Benchmark plan phase 0** — the placement-rule bug in `BenchmarkRunnerPlan.md` §5 makes
    the current sweep report FAIL for every configuration, so nothing measured is
    trustworthy until it is fixed.
-3. **PR 1 (oneAPI)** — any time after step 1; it is mostly written already.
+3. **PR 1 (oneAPI)** — ready now; branch `oneapi-2026.1.0` is committed, needs only a push
+   and `gh pr create`.
 4. **PR 2 (`report_placement`)** — any time before benchmark Q7.
 5. Benchmark phases 1–5.
 
@@ -238,16 +331,22 @@ Q7 without sending PR 2.
 
 ## 6. Open questions
 
-1. **DECISION A** — which oneAPI version for each of the three lagging workflows?
-2. **DECISION B** — `report_placement` as an addition or a replacement?
-3. **Does upstream want the Derecho harness eventually?** `SeparationAnalysis.md` argues
+1. ~~**DECISION A**~~ — **answered: 2026.1.0 everywhere** (§3), with 2025.3.2 kept as a
+   selectable fallback in `derecho-images-ghcr.yaml`.
+2. **DECISION B** — `report_placement` as an addition or a replacement? Still open, and
+   still the one thing PR 2 waits on.
+3. **Is the 2026.0.0 HPCG miscompile worth reporting to Intel?** It reproduces at one rank
+   under pure OpenMP with a stock HPCG, which is about as small a repro as such a bug gets.
+   Nothing in this repo depends on the answer, but the finding is more useful upstream of
+   upstream.
+4. **Does upstream want the Derecho harness eventually?** `SeparationAnalysis.md` argues
    `make_apptainer_launcher.sh` and the host-MPI/ABI-shim machinery belong in the factory
    *if the factory certifies images for NCAR systems*. That is a real question for benkirk,
    not for us — but it is worth asking before the harness grows a `sites/` abstraction, so
    the answer shapes the design instead of arriving after it.
-4. **Is the fork intended to converge or diverge?** If it converges, more of Bucket B
+5. **Is the fork intended to converge or diverge?** If it converges, more of Bucket B
    eventually becomes Bucket A and it is worth keeping fork-only changes on clearly
    separable paths. If it diverges permanently, only correctness fixes flow upstream and
    the rest of this document is a one-time exercise.
-5. **`comprehend/workflow-dependency-auto-refresh`** is 8 commits ahead of upstream's copy.
+6. **`comprehend/workflow-dependency-auto-refresh`** is 8 commits ahead of upstream's copy.
    Separate PR, separate session, or abandon?

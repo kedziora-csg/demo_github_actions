@@ -682,6 +682,14 @@ FROM toolkits AS oneapi
 # BOTH: `intel-dpcpp-cpp-compiler-*` provides icx/icpx, `intel-fortran-compiler-*`
 # provides ifx.  Neither alone is sufficient.
 #
+# VERSION -- 2026.1.0, and specifically NOT 2026.0.0.  HPCG built with 2026.0.0 aborts
+# on `CheckProblem.cpp:146: Assertion 'A.totalNumberOfNonzeros == totalNumberOfNonzeros'`
+# whenever OpenMP threading is in play -- hybrid MPI+OpenMP and pure OpenMP on a single
+# rank alike, so MPI is not involved and the threaded nonzero count in GenerateProblem is
+# simply coming out wrong.  The same source is clean bare-metal and clean under the other
+# compilers.  2026.1.0 clears it; 2025.3.2 is the last good release before it, if a
+# fallback is ever needed.
+#
 # URL PROVENANCE -- these are Spack's, taken from the `versions` list in
 #   https://github.com/spack/spack-packages/blob/develop/repos/spack_repo/builtin/packages/intel_oneapi_compilers/package.py
 # where every release carries a `cpp` and an `ftn` entry.  Intel's download URLs embed
@@ -695,7 +703,7 @@ FROM toolkits AS oneapi
 #   >= 2026.0  Base and HPC merged into `intel-oneapi-toolkit-*` (no base/hpc infix),
 #              which does ship both -- it is NOT the old Base Toolkit.
 # The components sidestep that guesswork and are cheaper on disk: each is fetched,
-# installed and deleted before the next, so 1.0 GB + 0.9 GB never coexist on the runner.
+# installed and deleted before the next, so 1.0 GB + 0.8 GB never coexist on the runner.
 #
 # Getting this wrong does not fail at install time.  Whichever compiler is absent,
 # `which` returns empty, that CC/CXX/FC is exported empty, and autoconf (empty CC reads
@@ -711,9 +719,9 @@ FROM toolkits AS oneapi
 # (its coarray runtime, libicaf.so, launches images via Intel MPI) that the offline bundle
 # does not carry.  Harmless here -- --ignore-errors covers the unresolved dependency, we
 # never use `ifx -coarray`, and rm_paths below deletes Intel MPI even when one is supplied.
-ARG ONEAPI_VERSION=2025.3.2
-ARG ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d61d48a-4fe8-4cb2-bd9d-94d2c19c6227/intel-dpcpp-cpp-compiler-2025.3.2.26_offline.sh
-ARG ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/3e53d136-2870-4836-adb1-892b558fa34a/intel-fortran-compiler-2025.3.2.25_offline.sh
+ARG ONEAPI_VERSION=2026.1.0
+ARG ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/eb43fd3f-7cff-46a4-ab14-a2d3b60c4899/intel-dpcpp-cpp-compiler-2026.1.0.118_offline.sh
+ARG ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/87bd1c07-e474-4f38-9492-e44e15ea7a52/intel-fortran-compiler-2026.1.0.104_offline.sh
 RUN exec &> >(tee /container/logs/oneapi.log) \
     && echo "Installing Intel-OneAPI" \
     && echo "Intel OneAPI: https://www.intel.com/content/www/us/en/content-details/777700/intel-end-user-license-agreement-for-developer-tools-august-2024.html" >> /container/EULAs.txt \
