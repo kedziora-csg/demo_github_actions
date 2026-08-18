@@ -39,9 +39,16 @@ jobs:
           - compiler: oneapi
             compiler_build_args: |
               COMPILER_FAMILY=oneapi
-              ONEAPI_VERSION=2026.0.0
-              ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e2f4cda3-8891-4d0e-bf60-00d19c4e3e27/intel-dpcpp-cpp-compiler-2026.0.0.564_offline.sh
-              ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/176ca159-bee8-44f2-9164-db26f95de382/intel-fortran-compiler-2026.0.0.573_offline.sh
+              ONEAPI_VERSION=2026.1.0
+              # NOT 2026.0.0: it miscompiles HPCG's threaded nonzero count
+              # (CheckProblem.cpp:146 assertion, reproduces at one rank under
+              # pure OpenMP).  2026.1.0 clears it; 2025.3.2 is the fallback.
+              # BOTH required: dpcpp supplies icx/icpx, fortran supplies ifx.  URLs
+              # come from Spack's intel_oneapi_compilers package.py (`cpp`/`ftn`);
+              # the per-release UUID is not derivable from the version number.
+              # Keep in sync with matrix-build-images.yaml, the authoritative source.
+              ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/eb43fd3f-7cff-46a4-ab14-a2d3b60c4899/intel-dpcpp-cpp-compiler-2026.1.0.118_offline.sh
+              ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/87bd1c07-e474-4f38-9492-e44e15ea7a52/intel-fortran-compiler-2026.1.0.104_offline.sh
 
           - compiler: aocc
             compiler_build_args: |
