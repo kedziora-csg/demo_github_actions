@@ -96,18 +96,6 @@ jobs:
             compiler_build_args: |
               COMPILER_FAMILY=oneapi
               ONEAPI_VERSION=2026.1.0
-              # NOT 2026.0.0: it miscompiles HPCG's threaded nonzero count
-              # (CheckProblem.cpp:146 assertion, reproduces at one rank under
-              # pure OpenMP).  2026.1.0 clears it; 2025.3.2 is the fallback.
-              # Two component installers, BOTH required: dpcpp supplies icx/icpx,
-              # fortran supplies ifx.  Drop either and the matching CC/CXX/FC is
-              # exported empty and autoconf/cmake fall back to the base image's
-              # gcc/g++/gfortran -- a GNU-built image labelled oneapi.  The oneapi
-              # stage's icx/icpx/ifx guard fails the build rather than ship that.
-              # URLs are Spack's, from the `cpp`/`ftn` entries of the `versions` list in
-              # https://github.com/spack/spack-packages/blob/develop/repos/spack_repo/builtin/packages/intel_oneapi_compilers/package.py
-              # Each release has its own opaque UUID -- copy both URLs from there when
-              # bumping; editing the version inside an existing URL yields a 404.
               ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/eb43fd3f-7cff-46a4-ab14-a2d3b60c4899/intel-dpcpp-cpp-compiler-2026.1.0.118_offline.sh
               ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/87bd1c07-e474-4f38-9492-e44e15ea7a52/intel-fortran-compiler-2026.1.0.104_offline.sh
 

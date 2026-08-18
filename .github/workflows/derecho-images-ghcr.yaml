@@ -81,25 +81,10 @@ jobs:
         # each one merges rather than creating a standalone job.  Adding a
         # compiler here means adding it to the axis list too.
         include:
-          # oneAPI version is dispatch-selectable so a suspect release can be A/B'd
-          # on Derecho without editing this file.  2026.1.0 is the default and is
-          # validated there: 2026.0.0 miscompiled HPCG's threaded nonzero count
-          # (CheckProblem.cpp:146 assertion, reproducing at one rank under pure
-          # OpenMP) and 2026.1.0 clears it.  2025.3.2 is the last pre-2026 release
-          # known good, kept as the fallback.
-          #
-          # BOTH component installers are required and must move together: the
-          # dpcpp one supplies icx/icpx, the fortran one supplies ifx.  Drop
-          # either and the corresponding CC/CXX/FC is exported empty, so autoconf
-          # and cmake fall through to the base image's gcc/g++/gfortran -- a
-          # GNU-built image wearing an oneapi label.  The oneapi stage's
-          # icx/icpx/ifx guard fails the build instead of letting that ship.
-          #
-          # URLs come from the `cpp`/`ftn` entries of Spack's
-          # intel_oneapi_compilers package.py.  Each release carries its own
-          # opaque UUID that cannot be derived from the version number, so adding
-          # a version here means copying both URLs from there -- editing the
-          # version inside an existing URL yields a 404.
+          # oneAPI version is dispatch-selectable so a release can be A/B'd on Derecho
+          # without editing this file.  Both component URLs must move together; they
+          # come from the `cpp`/`ftn` entries of Spack's intel_oneapi_compilers
+          # package.py (see CLAUDE.md -- the per-release UUID is not derivable).
           - compiler: oneapi
             compiler_build_args: |
               COMPILER_FAMILY=oneapi

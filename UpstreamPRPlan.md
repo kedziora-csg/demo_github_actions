@@ -1,6 +1,7 @@
 # Plan: What To Send Upstream, And What To Keep In The Fork
 
-Status: **PR 1 is branched and committed locally, not pushed. PR 2 is still a proposal.**
+Status: **PR 1 is submitted upstream as benkirk#35 (open, awaiting review). PR 2 is still
+a proposal.**
 
 Handoff note for a future session. It records the fork/upstream split decision while it is
 fresh, so the next session starts from a decision instead of re-deriving one.
@@ -9,7 +10,8 @@ Companion to [BenchmarkRunnerPlan.md](BenchmarkRunnerPlan.md); see §5 for how t
 interact. Short version: **§3 is done; neither PR is a prerequisite for benchmark work.**
 
 Revised 2026-08-18. The oneAPI direction reversed since the first draft — see §3 — so §3
-and §4 were rewritten. §2 Bucket B, §5 and most of §6 are unchanged.
+and §4 were rewritten. §2 Bucket B, §5 and most of §6 are unchanged. Updated again once
+PR 1 was submitted; §3 gained "Consequence for `build_hpcg.sh`".
 
 ---
 
@@ -21,10 +23,11 @@ Measured 2026-08-18, after `git fetch upstream`.
 |---|---|
 | Fork | `kedziora-csg/demo_github_actions` (`origin`) |
 | Upstream | `benkirk/demo_github_actions` (`upstream`), default branch `main` |
-| Divergence | **77 commits ahead, 0 behind** `upstream/main` |
+| Divergence | **78 commits ahead, 0 behind** `upstream/main` |
 | Merge base | `f471750` — "June refresh (#31)", 2026-06-26 |
-| Total diff | 44 files, +8002 / −50 |
+| Total diff | 44 files, +8118 / −50 |
 | PR target | `benkirk:main` — upstream merges PRs there (`#31`) |
+| Open PR | **benkirk#35** — `kedziora-csg:oneapi-2026.1.0` → `main`, opened 2026-08-18, 3 files +70 / −10 |
 | Other upstream branches | `cuda13`, `comprehend/workflow-dependency-auto-refresh` |
 
 Two consequences worth noting:
@@ -146,14 +149,37 @@ is the dangerous one:
 - **no `icx`** — does not die at all. gcc-built C and ifx-built Fortran link happily, so the
   build goes green and publishes a GNU-built image labelled `oneapi`.
 
+
+**Where the history lives now.** On 2026-08-18 the 2026.0.0 narrative was deliberately
+stripped out of the code: the Dockerfile oneapi comment, the three matrix workflows, and
+`derecho-images-ghcr.yaml` no longer explain *why* 2026.1.0 is the default, and
+`build_hpcg.sh`'s patch comment no longer recounts the investigation. Solved issues leave
+tracks in git history, in this document, and in PR benkirk#35's description — not in
+comments a future reader has to wade through. What stayed in the code is only what is still
+actionable: both installers are required, the URLs come from Spack and carry a
+non-derivable UUID, the components are ~1.3 GB in a SIF against the toolkit's ~3.8 GB, and
+a missing compiler falls through to GNU silently (hence the guard). The bump procedure is
+now recorded once, in `CLAUDE.md` under "Versions and how to bump them".
+
+Note this leaves **PR benkirk#35's branch carrying the older, verbose comment**, which is
+appropriate — a reviewer with no other context needs the justification for the bump — but it
+means a fork-local trim hunk reappears on `containers/devenv/Dockerfile` if and when #35
+merges.
+
+This matters beyond tidiness: `BenchmarkRunnerPlan.md` phase 2 moves `build_hpcg.sh`'s
+app-specific knowledge into `/container/app.d/hpcg/`, so an incorrect root-cause note gets
+carried into the app contract unless it is corrected first.
+
 ---
 
 ## 4. The two PRs
 
 ### PR 1 — oneAPI: bump to 2026.1.0, and fail loudly when a compiler is missing
 
-**Status: branch built and committed, not pushed.** `oneapi-2026.1.0` @ `9873d9d`, one
-commit on top of `upstream/main`.
+**Status: SUBMITTED.** [benkirk#35](https://github.com/benkirk/demo_github_actions/pull/35),
+opened 2026-08-18 — base `main`, head `kedziora-csg:oneapi-2026.1.0` @ `9873d9d`, 3 files
++70 / −10, open and awaiting review. Scope verified against the submitted diff: it contains
+no `report_placement` lines, so PR 2 stayed out of it.
 
 **Do not cherry-pick.** `35d6f51` and `3d5e2de` implement the toolkit collapse — the
 opposite of what shipped — so replaying them applies a change that then has to be reverted.
@@ -183,7 +209,7 @@ the PR):
 
 Deliberately excluded: `report_placement` (PR 2) and both `*-ghcr.yaml` workflows (Bucket B).
 
-To submit:
+Submitted with:
 
 ```bash
 git push -u origin oneapi-2026.1.0
@@ -322,8 +348,8 @@ Q7 without sending PR 2.
 2. **Benchmark plan phase 0** — the placement-rule bug in `BenchmarkRunnerPlan.md` §5 makes
    the current sweep report FAIL for every configuration, so nothing measured is
    trustworthy until it is fixed.
-3. **PR 1 (oneAPI)** — ready now; branch `oneapi-2026.1.0` is committed, needs only a push
-   and `gh pr create`.
+3. ~~**PR 1 (oneAPI)**~~ — **submitted 2026-08-18 as benkirk#35.** Open, awaiting review;
+   nothing to do but watch it.
 4. **PR 2 (`report_placement`)** — any time before benchmark Q7.
 5. Benchmark phases 1–5.
 
@@ -339,14 +365,20 @@ Q7 without sending PR 2.
    under pure OpenMP with a stock HPCG, which is about as small a repro as such a bug gets.
    Nothing in this repo depends on the answer, but the finding is more useful upstream of
    upstream.
-4. **Does upstream want the Derecho harness eventually?** `SeparationAnalysis.md` argues
+4. ~~**Drop the `2025.3.2` fallback from `derecho-images-ghcr.yaml`?**~~ — **decided
+   2026-08-18: keep it for now.** It was added to A/B a suspect oneAPI release, and that
+   issue is solved, but the dispatch input is a generally useful lever. Clean up later.
+5. **Does upstream want the Derecho harness eventually?** `SeparationAnalysis.md` argues
    `make_apptainer_launcher.sh` and the host-MPI/ABI-shim machinery belong in the factory
    *if the factory certifies images for NCAR systems*. That is a real question for benkirk,
    not for us — but it is worth asking before the harness grows a `sites/` abstraction, so
    the answer shapes the design instead of arriving after it.
-5. **Is the fork intended to converge or diverge?** If it converges, more of Bucket B
+6. **Is the fork intended to converge or diverge?** If it converges, more of Bucket B
    eventually becomes Bucket A and it is worth keeping fork-only changes on clearly
    separable paths. If it diverges permanently, only correctness fixes flow upstream and
    the rest of this document is a one-time exercise.
-6. **`comprehend/workflow-dependency-auto-refresh`** is 8 commits ahead of upstream's copy.
-   Separate PR, separate session, or abandon?
+7. **`comprehend/workflow-dependency-auto-refresh`** is 8 commits ahead of upstream's copy,
+   but the premise has shifted since the first draft: benkirk#34 already **merged** that
+   branch on 2026-07-23 — into upstream's *topic branch of the same name*, not `main`, which
+   is why `upstream/main` never moved. So those 8 commits are follow-up work on an
+   already-merged track. Second PR to that branch, redirect at `main`, or abandon?

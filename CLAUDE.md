@@ -68,6 +68,18 @@ A version bump = edit `compiler_build_args` / `mpi_build_args` / `extra_build_ar
 two files (library versions like HDF5/NetCDF/PIO live in `extra_build_args`). For NVHPC also
 update the CUDA exclude paths in the Dockerfile (above).
 
+**oneAPI URLs come from Spack.** `ONEAPI_CC_URL` and `ONEAPI_FC_URL` are the `cpp` and `ftn`
+entries of the `versions` list in Spack's
+[`intel_oneapi_compilers/package.py`](https://github.com/spack/spack-packages/blob/develop/repos/spack_repo/builtin/packages/intel_oneapi_compilers/package.py).
+Intel embeds an opaque per-release UUID in the path that is **not derivable from the version
+number**, so a bump means copying both fresh URLs from there — editing the version inside an
+existing URL yields a 404. Both installers are required and must move together
+(`intel-dpcpp-cpp-compiler-*` → `icx`/`icpx`, `intel-fortran-compiler-*` → `ifx`); the
+oneapi stage guards for all three, because a missing one silently exports an empty
+`CC`/`CXX`/`FC` and autoconf/cmake then fall through to the base image's GNU toolchain.
+Deliberately **not** the all-in-one toolkit bundle: it lands ~3.8 GB in a SIF against
+~1.3 GB for the two components.
+
 **Matrix gotcha:** a new compiler must be added to the base `compiler:` axis list (not just
 an `include:` entry). An `include:`-only value that matches no base combination can't merge,
 so GitHub creates a single malformed standalone job for it with no `mpi`/`gpu`/`arch` — it

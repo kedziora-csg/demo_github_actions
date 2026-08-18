@@ -673,47 +673,23 @@ LABEL gcc="${GCC_VERSION}"
 # Intel OneAPI stage
 FROM toolkits AS oneapi
 #-------------------------------------------------------------------------------
-# https://packages.spack.io/package.html?name=intel-oneapi-compilers
-# https://github.com/spack/spack/blob/develop/var/spack/repos/builtin/packages/intel-oneapi-compilers/package.py
 # Intel compilers do not -rpath their own libraries, relying instead on LD_LIBRARY_PATH
 # We'd rather not need that, so add to the system search path
 #
-# OneAPI is installed from the two per-language COMPONENT installers, and we need
-# BOTH: `intel-dpcpp-cpp-compiler-*` provides icx/icpx, `intel-fortran-compiler-*`
-# provides ifx.  Neither alone is sufficient.
+# Installed from the two per-language COMPONENT installers, and BOTH are required:
+# `intel-dpcpp-cpp-compiler-*` provides icx/icpx, `intel-fortran-compiler-*` provides ifx.
+# Preferred over the all-in-one toolkit bundle, which lands ~3.8 GB in a SIF against
+# ~1.3 GB for the two components.
 #
-# VERSION -- 2026.1.0, and specifically NOT 2026.0.0.  HPCG built with 2026.0.0 aborts
-# on `CheckProblem.cpp:146: Assertion 'A.totalNumberOfNonzeros == totalNumberOfNonzeros'`
-# whenever OpenMP threading is in play -- hybrid MPI+OpenMP and pure OpenMP on a single
-# rank alike, so MPI is not involved and the threaded nonzero count in GenerateProblem is
-# simply coming out wrong.  The same source is clean bare-metal and clean under the other
-# compilers.  2026.1.0 clears it; 2025.3.2 is the last good release before it, if a
-# fallback is ever needed.
-#
-# URL PROVENANCE -- these are Spack's, taken from the `versions` list in
+# URLs are Spack's, from the `cpp` and `ftn` entries of the `versions` list in
 #   https://github.com/spack/spack-packages/blob/develop/repos/spack_repo/builtin/packages/intel_oneapi_compilers/package.py
-# where every release carries a `cpp` and an `ftn` entry.  Intel's download URLs embed
-# an opaque per-release UUID that CANNOT be derived from the version number, so a
-# version bump means copying both fresh URLs out of that file.  Do not hand-edit the
-# version string inside an existing URL -- the UUID will not match and you get a 404.
+# Intel embeds an opaque per-release UUID that is NOT derivable from the version number, so
+# a bump means copying both fresh URLs from there; editing the version inside an existing
+# URL yields a 404.
 #
-# Not used: the all-in-one toolkit bundles, whose filenames are a trap --
-#   <= 2025.x  `intel-oneapi-base-toolkit-*` has icx but NO ifx; only the HPC bundle
-#              (`intel-oneapi-hpc-toolkit-*`) ships both.
-#   >= 2026.0  Base and HPC merged into `intel-oneapi-toolkit-*` (no base/hpc infix),
-#              which does ship both -- it is NOT the old Base Toolkit.
-# The components sidestep that guesswork and are cheaper on disk: each is fetched,
-# installed and deleted before the next, so 1.0 GB + 0.8 GB never coexist on the runner.
-#
-# Getting this wrong does not fail at install time.  Whichever compiler is absent,
-# `which` returns empty, that CC/CXX/FC is exported empty, and autoconf (empty CC reads
-# as unset) and cmake fall through to the base image's GNU toolchain -- gcc, g++ and
-# gfortran are installed on every base_os, so there is always something to find.  The
-# two directions fail differently and neither is obvious:
-#   no ifx  -- dies much later linking Intel-compiled C against a GNU-driven mpifort.
-#   no icx  -- does not die at all.  gcc-built C and ifx-built Fortran link happily, so
-#              the build goes green and publishes a GNU-built image labelled oneapi.
-# Hence the icx/icpx/ifx guard below: it fails here, naming the installer at fault.
+# A missing compiler does not fail the install: `which` returns empty, that CC/CXX/FC is
+# exported empty, and autoconf and cmake fall through to the base image's gcc/g++/gfortran.
+# Hence the icx/icpx/ifx guard below.
 #
 # Note: the Fortran component declares a required dependency on intel.oneapi.lin.mpi.runtime
 # (its coarray runtime, libicaf.so, launches images via Intel MPI) that the offline bundle
