@@ -21,6 +21,7 @@
               "lstopo", "Caliper", "Adiak", "Thicket", "jsonl", "EESSI",
               "Sarus", "Shifter", "PyYAML", "libfabric", "Jülich",
               "jobstep", "Pawsey", "NERSC", "rundir", "hpcg",
-              "kedziora", "buildx", "diffstat", "gfortran", "setvars"],
+              "kedziora", "buildx", "diffstat", "gfortran", "setvars",
+              "codegen", "mpifort", "autoconf", "dpcpp", "ftn", "worktree"],
   "version": "0.2"
 }
