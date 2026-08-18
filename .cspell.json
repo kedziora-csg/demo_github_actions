@@ -16,6 +16,11 @@
               "almalinux",
               "shfmt",
               "sysfs", "getcpu", "numa", "procbind", "nranks", "nthreads",
-              "apptainer", "derecho", "ompthreads", "mpiprocs"],
+              "apptainer", "derecho", "ompthreads", "mpiprocs",
+              "Ramble", "Benchpark", "JUBE", "ReFrame", "xthi", "hwloc",
+              "lstopo", "Caliper", "Adiak", "Thicket", "jsonl", "EESSI",
+              "Sarus", "Shifter", "PyYAML", "libfabric", "Jülich",
+              "jobstep", "Pawsey", "NERSC", "rundir", "hpcg",
+              "kedziora", "buildx", "diffstat", "gfortran", "setvars"],
   "version": "0.2"
 }

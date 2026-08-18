@@ -678,25 +678,50 @@ FROM toolkits AS oneapi
 # Intel compilers do not -rpath their own libraries, relying instead on LD_LIBRARY_PATH
 # We'd rather not need that, so add to the system search path
 #
-# Use an OneAPI offline installer that ships BOTH icx and ifx.  Which bundle that
-# is depends on the release, and the filenames are a trap:
-#   <= 2025.x  three SKUs.  `intel-oneapi-base-toolkit-*` has icx but NO ifx;
-#              `intel-oneapi-hpc-toolkit-*` is the one to use.
-#   >= 2026.0  Base and HPC were merged into a single "Intel oneAPI Toolkit", so
-#              `intel-oneapi-toolkit-*` (no base/hpc infix) is the merged bundle
-#              and is correct -- it is NOT the old Base Toolkit.
-# Picking a base-toolkit URL does not fail here: `which ifx` just comes back empty,
-# FC silently degrades to gfortran, and the build dies much later linking HDF5.
-# The guard below turns that into an immediate, self-describing failure.
-ARG ONEAPI_VERSION=2026.1.0
-ARG ONEAPI_TOOLKIT_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/33cb2a22-ddf1-4aa9-8d68-1f5a118acaf2/intel-oneapi-toolkit-2026.1.0.192_offline.sh
+# OneAPI is installed from the two per-language COMPONENT installers, and we need
+# BOTH: `intel-dpcpp-cpp-compiler-*` provides icx/icpx, `intel-fortran-compiler-*`
+# provides ifx.  Neither alone is sufficient.
+#
+# URL PROVENANCE -- these are Spack's, taken from the `versions` list in
+#   https://github.com/spack/spack-packages/blob/develop/repos/spack_repo/builtin/packages/intel_oneapi_compilers/package.py
+# where every release carries a `cpp` and an `ftn` entry.  Intel's download URLs embed
+# an opaque per-release UUID that CANNOT be derived from the version number, so a
+# version bump means copying both fresh URLs out of that file.  Do not hand-edit the
+# version string inside an existing URL -- the UUID will not match and you get a 404.
+#
+# Not used: the all-in-one toolkit bundles, whose filenames are a trap --
+#   <= 2025.x  `intel-oneapi-base-toolkit-*` has icx but NO ifx; only the HPC bundle
+#              (`intel-oneapi-hpc-toolkit-*`) ships both.
+#   >= 2026.0  Base and HPC merged into `intel-oneapi-toolkit-*` (no base/hpc infix),
+#              which does ship both -- it is NOT the old Base Toolkit.
+# The components sidestep that guesswork and are cheaper on disk: each is fetched,
+# installed and deleted before the next, so 1.0 GB + 0.9 GB never coexist on the runner.
+#
+# Getting this wrong does not fail at install time.  Whichever compiler is absent,
+# `which` returns empty, that CC/CXX/FC is exported empty, and autoconf (empty CC reads
+# as unset) and cmake fall through to the base image's GNU toolchain -- gcc, g++ and
+# gfortran are installed on every base_os, so there is always something to find.  The
+# two directions fail differently and neither is obvious:
+#   no ifx  -- dies much later linking Intel-compiled C against a GNU-driven mpifort.
+#   no icx  -- does not die at all.  gcc-built C and ifx-built Fortran link happily, so
+#              the build goes green and publishes a GNU-built image labelled oneapi.
+# Hence the icx/icpx/ifx guard below: it fails here, naming the installer at fault.
+#
+# Note: the Fortran component declares a required dependency on intel.oneapi.lin.mpi.runtime
+# (its coarray runtime, libicaf.so, launches images via Intel MPI) that the offline bundle
+# does not carry.  Harmless here -- --ignore-errors covers the unresolved dependency, we
+# never use `ifx -coarray`, and rm_paths below deletes Intel MPI even when one is supplied.
+ARG ONEAPI_VERSION=2025.3.2
+ARG ONEAPI_CC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d61d48a-4fe8-4cb2-bd9d-94d2c19c6227/intel-dpcpp-cpp-compiler-2025.3.2.26_offline.sh
+ARG ONEAPI_FC_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/3e53d136-2870-4836-adb1-892b558fa34a/intel-fortran-compiler-2025.3.2.25_offline.sh
 RUN exec &> >(tee /container/logs/oneapi.log) \
     && echo "Installing Intel-OneAPI" \
     && echo "Intel OneAPI: https://www.intel.com/content/www/us/en/content-details/777700/intel-end-user-license-agreement-for-developer-tools-august-2024.html" >> /container/EULAs.txt \
     && ONEAPI_INSTALL_PATH="/container/intel-oneapi" \
     && mkdir -p /tmp/intel_installers && cd /tmp/intel_installers \
     && installer_opts="-a -s --eula accept --install-dir ${ONEAPI_INSTALL_PATH} --ignore-errors" \
-    && curl --retry 3 --retry-delay 5 -s ${ONEAPI_TOOLKIT_URL} -o oneapi-toolkit-installer.sh && ls -ltrh oneapi-toolkit-installer.sh && chmod +x ./oneapi-toolkit-installer.sh && ./oneapi-toolkit-installer.sh ${installer_opts} && rm -rf oneapi-toolkit-installer.sh \
+    && curl --retry 3 --retry-delay 5 -s ${ONEAPI_CC_URL} -o cpp-installer.sh && ls -ltrh cpp-installer.sh && chmod +x ./cpp-installer.sh && ./cpp-installer.sh ${installer_opts} && rm -rf cpp-installer.sh \
+    && curl --retry 3 --retry-delay 5 -s ${ONEAPI_FC_URL} -o fortran-installer.sh && ls -ltrh fortran-installer.sh && chmod +x ./fortran-installer.sh && ./fortran-installer.sh ${installer_opts} && rm -rf fortran-installer.sh \
     && cd ${ONEAPI_INSTALL_PATH} \
     && rm_paths="mpi debugger conda_channel compiler/*/linux/lib/oclfpga /opt/intel" \
     && echo "Removing extra bloat: ${rm_paths}" > README.whered_stuff_go && (du -hs ${rm_paths} >> README.whered_stuff_go || true) && cat README.whered_stuff_go \
@@ -706,7 +731,7 @@ RUN exec &> >(tee /container/logs/oneapi.log) \
     && add_conf "export ONEAPI_VERSION=${ONEAPI_VERSION}" \
     && add_conf "source ${ONEAPI_INSTALL_PATH}/setvars.sh --force >/dev/null 2>&1" \
     && source /container/config_env.sh \
-    && for _t in icx icpx ifx; do command -v ${_t} >/dev/null || { echo "ERROR: '${_t}' not found after installing OneAPI ${ONEAPI_VERSION}. ONEAPI_TOOLKIT_URL must point at a bundle shipping BOTH the C/C++ and Fortran compilers (HPC Toolkit or the unified 2026+ toolkit). The Base Toolkit has icx but no ifx, and 'which ifx' failing here would silently leave FC empty -> gfortran."; exit 1; }; done \
+    && for _t in icx icpx ifx; do command -v ${_t} >/dev/null || { case ${_t} in ifx) _src="ONEAPI_FC_URL (intel-fortran-compiler-*)";; *) _src="ONEAPI_CC_URL (intel-dpcpp-cpp-compiler-*)";; esac; echo "ERROR: '${_t}' not found after installing OneAPI ${ONEAPI_VERSION}. It should have been provided by ${_src} -- check that URL installed successfully in the log above. Both component installers are required; letting this pass would export an empty CC/CXX/FC and silently fall back to the base image's gcc/g++/gfortran, publishing a GNU-built image labelled oneapi."; exit 1; }; done \
     && add_conf "export oneapi_CC=$(which icx) && export CC=\${oneapi_CC}" \
     && add_conf "export oneapi_CXX=$(which icpx) && export CXX=\${oneapi_CXX}" \
     && add_conf "export oneapi_F77=$(which ifx) && export F77=\${oneapi_F77}" \

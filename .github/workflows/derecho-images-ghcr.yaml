@@ -42,6 +42,15 @@ on:
           - almalinux9
           - noble
 
+      oneapi_version:
+        description: "oneAPI version -- 2026.1.0 is UNTESTED, see the oneapi entry below"
+        type: choice
+        required: true
+        default: "2025.3.2"
+        options:
+          - "2025.3.2"
+          - "2026.1.0"
+
       test:
         description: "Test Image"
         type: boolean
@@ -72,15 +81,31 @@ jobs:
         # each one merges rather than creating a standalone job.  Adding a
         # compiler here means adding it to the axis list too.
         include:
+          # oneAPI version is dispatch-selectable so 2026.1.0 can be tried on
+          # Derecho without editing this file.  2025.3.2 is the default and the
+          # only version confirmed good: 2026.0.0 miscompiles HPCG's threaded
+          # nonzero count (CheckProblem.cpp:146 assertion, reproduces at one rank
+          # under pure OpenMP), and 2026.1.0 has never been run -- establishing
+          # that is exactly what the option is for.
+          #
+          # BOTH component installers are required and must move together: the
+          # dpcpp one supplies icx/icpx, the fortran one supplies ifx.  Drop
+          # either and the corresponding CC/CXX/FC is exported empty, so autoconf
+          # and cmake fall through to the base image's gcc/g++/gfortran -- a
+          # GNU-built image wearing an oneapi label.  The oneapi stage's
+          # icx/icpx/ifx guard fails the build instead of letting that ship.
+          #
+          # URLs come from the `cpp`/`ftn` entries of Spack's
+          # intel_oneapi_compilers package.py.  Each release carries its own
+          # opaque UUID that cannot be derived from the version number, so adding
+          # a version here means copying both URLs from there -- editing the
+          # version inside an existing URL yields a 404.
           - compiler: oneapi
             compiler_build_args: |
               COMPILER_FAMILY=oneapi
-              ONEAPI_VERSION=2025.3.1
-              # HPC Toolkit, NOT Base Toolkit: only the HPC bundle ships ifx.
-              # With the Base Toolkit `which ifx` comes back empty, FC silently
-              # falls back to gfortran, and HDF5 dies linking Intel-compiled C
-              # against a GNU-driven mpifort.  See the guard in the oneapi stage.
-              ONEAPI_TOOLKIT_URL=https://registrationcenter-download.intel.com/akdlm/IRC_NAS/f59a79aa-4a6e-46e8-a6c2-be04bb13f274/intel-oneapi-hpc-toolkit-2025.3.1.55_offline.sh
+              ONEAPI_VERSION=${{ inputs.oneapi_version }}
+              ONEAPI_CC_URL=${{ inputs.oneapi_version == '2026.1.0' && 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/eb43fd3f-7cff-46a4-ab14-a2d3b60c4899/intel-dpcpp-cpp-compiler-2026.1.0.118_offline.sh' || 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d61d48a-4fe8-4cb2-bd9d-94d2c19c6227/intel-dpcpp-cpp-compiler-2025.3.2.26_offline.sh' }}
+              ONEAPI_FC_URL=${{ inputs.oneapi_version == '2026.1.0' && 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/87bd1c07-e474-4f38-9492-e44e15ea7a52/intel-fortran-compiler-2026.1.0.104_offline.sh' || 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/3e53d136-2870-4836-adb1-892b558fa34a/intel-fortran-compiler-2025.3.2.25_offline.sh' }}
 
           - compiler: gcc14
             compiler_build_args: |
