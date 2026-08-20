@@ -46,6 +46,11 @@ Two consequences worth noting:
 Roughly 1,800 of the 8,002 added lines are plausibly upstream's. The rest is fork
 infrastructure and design work.
 
+**Update 2026-08-19:** benkirk has consented to `app-image-builder-ghcr.yaml` replacing
+`matrix-smoketest-applications.yaml` (`BenchmarkRunnerPlan.md` DECISION 4). PR 2's hunk for
+that file stays valid — upstream still has it — but the replacement itself becomes a future
+Bucket A contribution rather than a fork-only change.
+
 ### Bucket A — send upstream
 
 | Change | Files | Why it is upstream's |
