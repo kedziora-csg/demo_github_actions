@@ -54,6 +54,28 @@ curl --retry 3 --retry-delay 5 -sSL https://mvapich.cse.ohio-state.edu/download/
 
 cd ${topdir}
 
+#-------------------------------------------------------------------------------
+# The app contract, so a benchmark runner can drive OSU the same way it drives
+# any other app.  @OMB_VERSION@ is substituted here because the install path
+# carries the version and the contract must name the binary that was actually
+# built.  See scripts/app.d/README.md.
+#-------------------------------------------------------------------------------
+app_src="${SCRIPTDIR}/app.d/osu"
+[ -d "${app_src}" ] || app_src="/container/extras/app.d/osu"
+if [ -d "${app_src}" ]; then
+    mkdir -p ${INSTALL_ROOT}/app.d
+    cp -R "${app_src}" ${INSTALL_ROOT}/app.d/
+    for f in ${INSTALL_ROOT}/app.d/osu/*; do
+        sed -i "s|@OMB_VERSION@|${OMB_VERSION}|g" "${f}"
+    done
+    chmod +x ${INSTALL_ROOT}/app.d/osu/launch ${INSTALL_ROOT}/app.d/osu/extract
+    # An unsubstituted placeholder ships an app whose binary path does not
+    # exist, and nothing notices until a job three hours into a queue.
+    ! grep -rq '@OMB_VERSION@' ${INSTALL_ROOT}/app.d/osu/ \
+        || { echo "app.d/osu still contains @OMB_VERSION@ after substitution"; exit 1; }
+    echo "installed app contract: ${INSTALL_ROOT}/app.d/osu"
+fi
+
 ldd ${INSTALL_ROOT}/osu-micro-benchmarks/${OMB_VERSION}/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency
 mpiexec -n 2 ${mpiexec_args} ${INSTALL_ROOT}/osu-micro-benchmarks/${OMB_VERSION}/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_latency
 mpiexec -n 2 ${mpiexec_args} ${INSTALL_ROOT}/osu-micro-benchmarks/${OMB_VERSION}/libexec/osu-micro-benchmarks/mpi/pt2pt/osu_bibw
