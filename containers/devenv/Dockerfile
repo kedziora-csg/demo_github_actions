@@ -975,7 +975,46 @@ FROM clang-src AS clang
 
 #-------------------------------------------------------------------------------
 FROM ${COMPILER_FAMILY} AS compilers
-RUN echo "Setting ${COMPILER_FAMILY} compiler layer"
+
+#-------------------------------------------------------------------------------
+# Microarchitecture, for every compiler family rather than just nvhpc.
+#
+# It has to be declared HERE, at the join point, because ARGs do not cross stage
+# boundaries.  Declared only in the nvhpc stage it reached nvhpc builds and no
+# others, so a MARCH_FLAGS build-arg passed to a gcc or oneapi build was accepted
+# by docker and then silently ignored -- which is why those images were baseline
+# x86-64, with no AVX2, while nvhpc had it.
+#
+# The spelling is the caller's problem, not this file's: nvc needs -tp=, GNU and
+# LLVM need -march=, aarch64 needs -mcpu=.  MARCH_FLAGS carries whichever is right
+# for the matrix entry that set it, and is left EMPTY by default so the general
+# matrices keep building portable images.
+#
+# Two deliberate asymmetries with the nvhpc stage, which sets these itself:
+#
+#   -fPIC   stays nvhpc-only.  It is needed there for the shared libraries built
+#           later and is not wanted for the other families.
+#   -O2     appears only here.  Setting CFLAGS at all suppresses autoconf's own
+#           `-g -O2` default (AC_PROG_CC only supplies it when CFLAGS is UNSET),
+#           so a package that relies on that default would quietly lose its
+#           optimisation the moment we set CFLAGS to carry -march.  Naming -O2
+#           explicitly costs nothing and removes the trap.  Packages that set
+#           their own level -- HDF5 uses -O3 -- still win, since theirs comes last.
+#-------------------------------------------------------------------------------
+ARG COMPILER_FAMILY
+ARG MARCH_FLAGS=""
+RUN echo "Setting ${COMPILER_FAMILY} compiler layer (MARCH_FLAGS=${MARCH_FLAGS:-<none>})" \
+    && case "${COMPILER_FAMILY}" in \
+         nvhpc) : ;; \
+         *) source /container/config_env.sh \
+            && add_conf "export MARCH_FLAGS=\"${MARCH_FLAGS}\"" \
+            && if [ -n "${MARCH_FLAGS}" ]; then \
+                   add_conf "export CFLAGS=\"-O2 ${MARCH_FLAGS}\"" ; \
+                   add_conf "export CXXFLAGS=\"-O2 ${MARCH_FLAGS}\"" ; \
+                   add_conf "export F77FLAGS=\"-O2 ${MARCH_FLAGS}\"" ; \
+                   add_conf "export FCFLAGS=\"-O2 ${MARCH_FLAGS}\"" ; \
+               fi ;; \
+       esac
 #-------------------------------------------------------------------------------
 
 

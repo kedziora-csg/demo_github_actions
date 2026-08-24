@@ -150,8 +150,15 @@ have `include:` build-args.)
   back to its auto-detected default `-tp` = the *build runner's* native CPU (e.g. `-tp znver4`
   → AVX-512). The image then carries instructions the **test/deploy** host may lack → a bare
   `Illegal instruction` (SIGILL) that looks OS-specific but is really build-vs-run runner
-  roulette. Use nvc's own ABI-level target instead: the nvhpc matrix entry sets
-  `MARCH_FLAGS=-tp=x86-64-v3` (other families keep `-march=…`). Note `nvc -V` prints the
+  roulette. Use nvc's own ABI-level target instead: `-tp=`, not `-march=`.
+  `MARCH_FLAGS` carries whichever spelling the family needs and is declared in the
+  **`compilers` stage** so it reaches every family — declared in the nvhpc stage
+  alone (as it was) it was accepted and silently ignored for gcc and oneapi, which
+  is how four of the six Derecho images ended up baseline `x86-64` with no AVX2.
+  The Derecho set now targets its actual CPU: `-march=znver3`, `-tp=zen3`. Leave
+  it empty for the general matrices, which must stay portable — and note
+  `-march=x86-64-v3` does not merely underperform on the `aarch64` axis, it fails
+  to compile. Note `nvc -V` prints the
   *default* `-tp`, not the per-compile one — don't trust it; inspect the binary.
 - **`report_cpu_features [binary]`** (`/container/bin/`, a base_os FILE-heredoc) is the tool
   for the above: it prints the host's SIMD level and, given an executable, the ISA it

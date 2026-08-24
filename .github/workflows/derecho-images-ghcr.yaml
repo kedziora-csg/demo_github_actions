@@ -12,6 +12,10 @@ name: Build Derecho Image Set (GHCR)
 #              leap's system compiler).
 #   nvhpc   -- the third compiler NCAR provides modules for.
 #   mpich   -- only MPICH can be displaced by Cray MPICH's ABI shim.
+#   znver3  -- Derecho is 2 x EPYC 7763 (Milan / Zen 3): AVX2 and FMA, no
+#              AVX-512.  These six images are Derecho-only -- Casper uses the
+#              almalinux9 set -- so targeting the CPU exactly costs nothing.
+#              Set per compiler because the spelling differs (see the matrix).
 #   openmpi -- the alternative, still unproven on Derecho.
 #
 # Consumed by containers/deploy/ncar-hpc: libexec/Makefile's `derecho` target
@@ -88,6 +92,7 @@ jobs:
           - compiler: oneapi
             compiler_build_args: |
               COMPILER_FAMILY=oneapi
+              MARCH_FLAGS=-march=znver3
               ONEAPI_VERSION=${{ inputs.oneapi_version }}
               ONEAPI_CC_URL=${{ inputs.oneapi_version == '2026.1.0' && 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/eb43fd3f-7cff-46a4-ab14-a2d3b60c4899/intel-dpcpp-cpp-compiler-2026.1.0.118_offline.sh' || 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d61d48a-4fe8-4cb2-bd9d-94d2c19c6227/intel-dpcpp-cpp-compiler-2025.3.2.26_offline.sh' }}
               ONEAPI_FC_URL=${{ inputs.oneapi_version == '2026.1.0' && 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/87bd1c07-e474-4f38-9492-e44e15ea7a52/intel-fortran-compiler-2026.1.0.104_offline.sh' || 'https://registrationcenter-download.intel.com/akdlm/IRC_NAS/3e53d136-2870-4836-adb1-892b558fa34a/intel-fortran-compiler-2025.3.2.25_offline.sh' }}
@@ -96,14 +101,15 @@ jobs:
             compiler_build_args: |
               COMPILER_FAMILY=gcc
               GCC_VERSION=14.3.0
+              MARCH_FLAGS=-march=znver3
 
-          # -tp=x86-64-v3, not -march=: nvc silently ignores GNU's -march and
-          # would otherwise target the build runner's CPU, producing a binary
-          # that SIGILLs on Derecho.
+          # Same target, different spelling: nvc rejects GNU's -march= and
+          # silently ignores it, then falls back to -tp native -- the BUILD
+          # runner's CPU -- producing a binary that SIGILLs on Derecho.
           - compiler: nvhpc
             compiler_build_args: |
               COMPILER_FAMILY=nvhpc
-              MARCH_FLAGS=-tp=x86-64-v3
+              MARCH_FLAGS=-tp=zen3
               NVHPC_VERSION=26.5
               NVHPC_URL=https://developer.download.nvidia.com/hpc-sdk/26.5/nvhpc_2026_265_Linux_x86_64_cuda_multi.tar.gz
 
@@ -119,12 +125,18 @@ jobs:
 
     uses: ./.github/workflows/build-hpc-dev-image-ghcr.yaml
     with:
-      # docker_repo deliberately NOT passed: the callee defaults to
-      # ghcr.io/${{ github.repository_owner }}/hpcdev, which is the only correct
-      # destination for this workflow.  A free-text field here was previously
-      # filled in as "kedziora", which is an unqualified name -- Docker resolves
-      # those to Docker Hub's library/ namespace, so the build succeeded and then
-      # failed pushing cache to library/kedziora-x86_64-cache with a 401.
+      # A SEPARATE repository from the portable factory images, because these
+      # make a different promise.  Both this workflow and matrix-build-images-ghcr
+      # build `leap-<compiler>-<mpi>`, and that one defaults to os: leap -- so
+      # publishing both to .../hpcdev would leave one tag meaning either "runs
+      # anywhere" or "needs Zen 3", depending on which ran last.  A different
+      # contract deserves a different namespace, not a suffix on a shared one.
+      #
+      # Keep it FULLY QUALIFIED.  This field was once filled in as "kedziora",
+      # an unqualified name that Docker resolves to Docker Hub's library/
+      # namespace, so the build succeeded and then failed pushing cache to
+      # library/kedziora-x86_64-cache with a 401.
+      docker_repo: ghcr.io/${{ github.repository_owner }}/hpcdev-derecho
       os: ${{ inputs.os }}
       # Derecho CPU nodes are x86_64 and this set is CPU-only; GPU images are a
       # later axis (they need --nv, set_gpu_rank and an ngpus PBS select line).
