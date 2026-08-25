@@ -69,6 +69,10 @@ if [ -d "${app_src}" ]; then
         sed -i "s|@OMB_VERSION@|${OMB_VERSION}|g" "${f}"
     done
     chmod +x ${INSTALL_ROOT}/app.d/osu/launch ${INSTALL_ROOT}/app.d/osu/extract
+    # Same stamp build_hpcg.sh writes: what this build actually targeted, in the
+    # contract the runner copies into every results directory.
+    printf 'built_with_march: "%s"\n' "${MARCH_FLAGS:-compiler default}" \
+        >> ${INSTALL_ROOT}/app.d/osu/app.yaml
     # An unsubstituted placeholder ships an app whose binary path does not
     # exist, and nothing notices until a job three hours into a queue.
     ! grep -rq '@OMB_VERSION@' ${INSTALL_ROOT}/app.d/osu/ \
