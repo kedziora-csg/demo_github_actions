@@ -19,7 +19,7 @@ name: Build Derecho Image Set (GHCR)
 #   openmpi -- the alternative, still unproven on Derecho.
 #
 # Consumed by containers/deploy/ncar-hpc: libexec/Makefile's `derecho` target
-# builds the matching .sif files, and submit_placement_matrix.sh runs the sweep.
+# builds the matching .sif files, and bench/submit runs the sweep.
 #
 # WHY THIS IS A SEPARATE FILE, not a preset inside matrix-build-images-ghcr.yaml:
 # narrowing that workflow's axes orphans its include: blocks.  GitHub turns every
