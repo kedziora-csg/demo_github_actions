@@ -1,37 +1,29 @@
 #!/bin/bash
 #===============================================================================
-# sites/derecho/site.sh -- what a job needs to know about this machine.
+# sites/casper/site.sh -- what a job needs to know about this machine.
 #
-# Sourced by every PBS script here, before anything else.  It has two halves,
-# and the split is the point:
+# UNVERIFIED.  The generated block below comes from ../casper.yaml, which was
+# written from PBS/OSU_casper.pbs rather than from a job that ran.  Read that
+# file's header before trusting anything here, and see bench/sitegen.
+#
+# Sourced by every PBS script here, before anything else.  It has two halves:
 #
 #   THE PART YOU EDIT is four paths -- where the checkout is, where the images
 #   are, where results go, which scratch.  Those are properties of the OPERATOR.
-#   They differ between two people on the same machine, and nothing can work
-#   them out for you.
 #
-#   THE GENERATED PART, between the markers below, is everything that is a
-#   property of the MACHINE: the scheduler dialect, the module bootstrap, the
-#   node geometry, the container bind list and the host-MPI recipe.  It is
-#   written from ../derecho.yaml by bench/sitegen, and bench/test_bench.sh fails
-#   while it is stale.  Edit the YAML, not the block.
+#   THE GENERATED PART, between the markers, is a property of the MACHINE and is
+#   written from ../casper.yaml by bench/sitegen.  Edit the YAML, not the block.
 #
 # HOW TO USE IT
 #
-#   Working inside the checkout?  Nothing to do.  A job submitted from anywhere
-#   under the repository finds this file by walking up, and works out the paths
-#   from where this file itself lives.
+#   Working inside the checkout?  Nothing to do -- the paths are worked out from
+#   where this file itself lives.
 #
-#   Want to submit from anywhere on the machine?  Copy this file to
-#   ~/.config/hpcdev/site.sh and set NCAR_HPC_ROOT below to your clone.
-#   NCAR_HPC_ROOT = /path/to/demo_github_actions/containers/deploy/ncar-hpc
-#   or /path/to/demo_github_actions/containers/deploy/<site_dir>
-#
-#   A copy outside the checkout goes stale silently -- sitegen --check only sees
-#   the one in the repository.  Re-copy it after a site description changes.
-#
-#   Want a one-off change?  Every setting honours an existing value, so
-#   `qsub -v BENCH_RESULTS_ROOT=$SCRATCH/runs ...` wins over the file.
+#   Submitting from anywhere on the machine?  Copy this file to
+#   ~/.config/hpcdev/site.sh and set NCAR_HPC_ROOT below to your clone.  Note
+#   that ~/.config holds ONE profile, so a copy there picks a site: keep the
+#   copy for whichever machine you mostly work on and let the other be found by
+#   walking up from the checkout.
 #===============================================================================
 
 
@@ -39,23 +31,15 @@
 # SETTINGS -- this is the part you edit.
 #-------------------------------------------------------------------------------
 
-# The clone: the directory containing libexec/ and PBS/.
-#
-# Leave blank when this file is inside the checkout -- it is then worked out from
-# this file's own location, which is always right and survives cloning the
-# repository somewhere new.  Set it when the file lives outside a checkout
-# (~/.config/hpcdev/site.sh), because there is then nothing to work it out from.
+# The clone: the directory containing libexec/ and PBS/.  Leave blank inside the
+# checkout; set it when this file lives outside one.
 NCAR_HPC_ROOT="${NCAR_HPC_ROOT:-}"
-#NCAR_HPC_ROOT=/glade/derecho/scratch/${USER}/demo_github_actions/containers/deploy/ncar-hpc
 
-# Where the .sif images live.  Separate from the harness because images are big
-# and often kept on a different filesystem from the code.
+# Where the .sif images live.
 BENCH_IMAGE_DIR="${BENCH_IMAGE_DIR:-}"
 
-# Where results directories are created.  Blank means "the directory the job was
-# submitted from", so you qsub where you want the output.  Point it at scratch to
-# collect every run in one place instead:
-#BENCH_RESULTS_ROOT=${SCRATCH}/hpcdev-bench
+# Where results directories are created.  Blank means the directory the job was
+# submitted from.
 BENCH_RESULTS_ROOT="${BENCH_RESULTS_ROOT:-}"
 
 # Big, fast, purgeable space, for apps that stage large input trees.
@@ -64,34 +48,37 @@ BENCH_SCRATCH="${BENCH_SCRATCH:-${SCRATCH:-/glade/derecho/scratch/${USER}}}"
 
 #-------------------------------------------------------------------------------
 # THE MACHINE -- generated.  Nothing below this line to the closing marker is
-# hand-maintained; ../derecho.yaml is where these values are decided.
+# hand-maintained; ../casper.yaml is where these values are decided.
 #-------------------------------------------------------------------------------
 # >>> BEGIN GENERATED -- bench/sitegen
 #
-# Written from sites/derecho.yaml.  Do not edit between the markers: the next
-# `bench/sitegen derecho --write` overwrites it, and bench/test_bench.sh
+# Written from sites/casper.yaml.  Do not edit between the markers: the next
+# `bench/sitegen casper --write` overwrites it, and bench/test_bench.sh
 # fails while it is stale.  Change the YAML instead.
 #
 # Every setting below honours a value already in the environment, so a
 # one-off `qsub -v BENCH_QUEUE=develop ...` still wins over the file.
 #
-# NCAR Derecho: 2 x AMD EPYC 7763 (Milan) per CPU node, SMT on, HPE Cray EX with Slingshot 11
+# NCAR Casper: heterogeneous analysis and GPU cluster; this file describes its 64-core Milan GPU nodes
+#
+# UNVERIFIED: nothing here has been confirmed by a job that ran.
+# Treat every value as a hypothesis until one has.
 
 #-- identity and scheduler -----------------------------------------------
-[ -n "${BENCH_SITE:-}" ] || BENCH_SITE='derecho'
+[ -n "${BENCH_SITE:-}" ] || BENCH_SITE='casper'
 [ -n "${BENCH_SCHEDULER:-}" ] || BENCH_SCHEDULER='pbspro'
 [ -n "${BENCH_SUBMIT:-}" ] || BENCH_SUBMIT='qsub'
-[ -n "${BENCH_QUEUE:-}" ] || BENCH_QUEUE='main'
-[ -n "${BENCH_WALLTIME_MAX:-}" ] || BENCH_WALLTIME_MAX='12:00:00'
+[ -n "${BENCH_QUEUE:-}" ] || BENCH_QUEUE='casper'
+[ -n "${BENCH_WALLTIME_MAX:-}" ] || BENCH_WALLTIME_MAX='24:00:00'
 
 #-- node geometry: fallbacks, never measurements --------------------------
 # The job probes lscpu and topology.json carries THAT answer.  These
 # are what can be known before there is a node to ask, which is when
 # an illegal ranks x threads is still cheap to reject.
-[ -n "${BENCH_CORES_PER_NODE:-}" ] || BENCH_CORES_PER_NODE='128'
+[ -n "${BENCH_CORES_PER_NODE:-}" ] || BENCH_CORES_PER_NODE='64'
 [ -n "${BENCH_SMT:-}" ] || BENCH_SMT='2'
 [ -n "${BENCH_SOCKETS:-}" ] || BENCH_SOCKETS='2'
-[ -n "${BENCH_SMT_STRIDE:-}" ] || BENCH_SMT_STRIDE='128'
+[ -n "${BENCH_SMT_STRIDE:-}" ] || BENCH_SMT_STRIDE='64'
 [ -n "${BENCH_CORES_PER_L3:-}" ] || BENCH_CORES_PER_L3='8'
 [ -n "${BENCH_CORES_PER_NUMA:-}" ] || BENCH_CORES_PER_NUMA='16'
 [ -n "${BENCH_TOPOLOGY_MODE:-}" ] || BENCH_TOPOLOGY_MODE='probe'
@@ -104,17 +91,17 @@ BENCH_SCRATCH="${BENCH_SCRATCH:-${SCRATCH:-/glade/derecho/scratch/${USER}}}"
 
 #-- the container --------------------------------------------------------
 [ -n "${BENCH_CONTAINER_RUNTIME:-}" ] || BENCH_CONTAINER_RUNTIME='apptainer'
-[ -n "${BENCH_BINDS:-}" ] || BENCH_BINDS='/glade /local_scratch /run /var/run /opt/cray /etc/cray'
+[ -n "${BENCH_BINDS:-}" ] || BENCH_BINDS='/glade /local_scratch /proc'
 # Bound only where the directory exists: apptainer treats a missing bind
 # SOURCE as fatal, so an unconditional bind of a filesystem this machine
 # may lack turns 'that mount is absent' into 'the job will not start'.
-[ -n "${BENCH_BINDS_IF_PRESENT:-}" ] || BENCH_BINDS_IF_PRESENT='/usr/lpp/mmfs'
+[ -n "${BENCH_BINDS_IF_PRESENT:-}" ] || BENCH_BINDS_IF_PRESENT='/usr/lpp/mmfs /run /var/run'
 # host:container pairs, for a directory that must NOT land on top of the
 # container's own tree.
 [ -n "${BENCH_BIND_MAP:-}" ] || BENCH_BIND_MAP='/usr/lib64:/host_lib64'
 # LD_LIBRARY_PATH inside the container, in order, after whatever the MPI
 # overlay prepends.  A * entry is a glob and takes its newest match.
-[ -n "${BENCH_LIB_DIRS:-}" ] || BENCH_LIB_DIRS='/opt/cray/pe/lib64 /opt/cray/pals/*/lib ${NCAR_ROOT_LIBFABRIC}/lib64 /opt/cray/libfabric/*/lib64 /usr/lpp/mmfs/lib /usr/lib64'
+[ -n "${BENCH_LIB_DIRS:-}" ] || BENCH_LIB_DIRS='${NCAR_ROOT_OPENMPI}/lib /usr/lpp/mmfs/lib /usr/lib64'
 
 #-- host modules ---------------------------------------------------------
 # Container compiler tag to host module.  The host MPI that
@@ -122,8 +109,6 @@ BENCH_SCRATCH="${BENCH_SCRATCH:-${SCRATCH:-/glade/derecho/scratch/${USER}}}"
 # compiler, and the tag in the image name is what names which.
 bench_site_compiler_module () {
     case "$1" in
-        aocc    ) echo 'aocc' ;;
-        clang   ) echo 'clang' ;;
         gcc     ) echo 'gcc' ;;
         gcc14   ) echo 'gcc/14.3.0' ;;
         nvhpc   ) echo 'nvhpc' ;;
@@ -136,8 +121,6 @@ bench_site_compiler_module () {
 # already in the default environment and there is nothing to load.
 bench_site_mpi_module () {
     case "$1" in
-        mpich   ) echo '' ;;
-        mpich3  ) echo '' ;;
         openmpi ) echo 'openmpi' ;;
         *       ) echo '' ;;
     esac
@@ -147,8 +130,6 @@ bench_site_mpi_module () {
 # would put its own mpiexec and libraries ahead of this family's.
 bench_site_mpi_unload () {
     case "$1" in
-        mpich   ) echo 'openmpi' ;;
-        mpich3  ) echo 'openmpi' ;;
         *       ) echo '' ;;
     esac
 }
@@ -157,8 +138,6 @@ bench_site_mpi_unload () {
 # Which mpiexec dialect emits this family's placement flags.
 bench_site_mpi_launcher () {
     case "$1" in
-        mpich   ) echo 'pals' ;;
-        mpich3  ) echo 'pals' ;;
         openmpi ) echo 'openmpi' ;;
         *       ) echo '' ;;
     esac
@@ -169,8 +148,6 @@ bench_site_mpi_launcher () {
 # reasoning, and reasoning does not belong in a data file.
 bench_site_mpi_overlay () {
     case "$1" in
-        mpich   ) echo 'cray-mpich-abi' ;;
-        mpich3  ) echo 'cray-mpich-abi' ;;
         openmpi ) echo 'host-openmpi' ;;
         *       ) echo '' ;;
     esac
@@ -180,9 +157,7 @@ bench_site_mpi_overlay () {
 # family.  Where a workaround specific to this machine goes.
 bench_site_mpi_env () {
     case "$1" in
-        mpich   ) echo 'MPICH_SMP_SINGLE_COPY_MODE=NONE MPICH_VERSION_DISPLAY=1' ;;
-        mpich3  ) echo 'MPICH_SMP_SINGLE_COPY_MODE=NONE MPICH_VERSION_DISPLAY=1' ;;
-        openmpi ) echo 'OMPI_MCA_btl_vader_single_copy_mechanism=none UCX_POSIX_USE_PROC_LINK=n' ;;
+        openmpi ) echo 'UCX_POSIX_USE_PROC_LINK=n' ;;
         *       ) echo '' ;;
     esac
 }
@@ -196,7 +171,8 @@ bench_site_modules () {
         module --force purge && \
         module load ncarenv/25.10 && \
         module reset && \
-        module load apptainer
+        module load apptainer && \
+        module load cuda
     } >/dev/null 2>&1
 }
 
@@ -220,9 +196,6 @@ fi
 : "${BENCH_IMAGE_DIR:=${NCAR_HPC_ROOT}/libexec}"
 : "${BENCH_RESULTS_ROOT:=${PBS_O_WORKDIR:-$(pwd)}}"
 
-# bench/ is a sibling of ncar-hpc/, not a child: it is site-agnostic, and
-# ncar-hpc/ is not.  A generated job script names runner.sh outright, so this is
-# for the hand-qsub path, which has only the site profile to go on.
 if [ -z "${BENCH_ROOT:-}" ] && [ -d "${NCAR_HPC_ROOT}/../bench" ]; then
     BENCH_ROOT="$(cd "${NCAR_HPC_ROOT}/../bench" && pwd)"
 fi
