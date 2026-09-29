@@ -13,13 +13,17 @@ name: Build Derecho Image Set (GHCR)
 #   nvhpc   -- the third compiler NCAR provides modules for.
 #   mpich   -- only MPICH can be displaced by Cray MPICH's ABI shim.
 #   znver3  -- Derecho is 2 x EPYC 7763 (Milan / Zen 3): AVX2 and FMA, no
-#              AVX-512.  These six images are Derecho-only -- Casper uses the
-#              almalinux9 set -- so targeting the CPU exactly costs nothing.
-#              Set per compiler because the spelling differs (see the matrix).
-#   openmpi -- the alternative, still unproven on Derecho.
+#              AVX-512.  Set per compiler because the spelling differs (see
+#              the matrix).
+#   openmpi -- the alternative to mpich, and the only family Casper can host.
 #
-# Consumed by sif/Makefile, whose `derecho` target
-# builds the matching .sif files, and hpcrun/submit runs the sweep.
+# Who uses which: Derecho's hpcrun sets (sites/ncar/derecho.yaml, images:) take
+# all six.  Casper's (sites/ncar/casper.yaml) take the three openmpi images --
+# Casper's Genoa nodes run Zen 3 code, and it has no Cray MPICH shim for the
+# mpich ones.  Only the legacy sites/ncar/legacy/OSU_casper.pbs uses the
+# portable almalinux9 set.  hpcrun/sitegen turns each cluster's images: block
+# into the images.mk that sif/Makefile builds from (`make derecho`,
+# `make casper-hpcg`), and hpcrun/submit runs the sweep.
 #
 # WHY THIS IS A SEPARATE FILE, not a preset inside matrix-build-images-ghcr.yaml:
 # narrowing that workflow's axes orphans its include: blocks.  GitHub turns every
