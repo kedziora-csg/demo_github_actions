@@ -62,15 +62,16 @@ The publish step in the GitHub Actions (GHA) workflow attaches Software Bill of 
 
 ### HPC Deployment Configuration
 
-The directory:
+Three top-level directories deploy and run the images on HPC clusters:
 
 ```text
-containers/deploy/ncar-hpc/
+hpcrun/    the runner: submit, validate and collect on the login node; runner.sh in the job
+sites/     what each machine is -- sites/ncar.yaml, sites/ncar/<cluster>.yaml -- and each
+           cluster's profile and PBS entry points
+sif/       turns a published image into a digest-pinned Apptainer .sif on a login node
 ```
 
-contains deployment configuration for NCAR HPC systems, including Apptainer and PBS-related assets for systems such as Derecho and Casper.
-
-For guidance on running on NCAR clusters see [NCAR_HowTo.md](containers/deploy/ncar-hpc/NCAR_HowTo.md) and some contextual aspects below.
+For guidance on running on NCAR clusters see [sites/ncar/README.md](sites/ncar/README.md) and some contextual aspects below.
 
 ### Build and Application Scripts
 
