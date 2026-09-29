@@ -1,7 +1,14 @@
 # Plan: What To Send Upstream, And What To Keep In The Fork
 
-Status: **PR 1 is submitted upstream as benkirk#35 (open, awaiting review). PR 2 is still
-a proposal.**
+Status: **On hold as of 2026-09-29: the fork no longer tracks upstream.** PR 1 was
+merged upstream as benkirk#35 on 2026-08-18. PR 2 (`report_placement`) was not sent and
+is not needed: the factory becomes the fork's own product in
+`NCAR/hpc-dev-container-factory` (option D of `ImagePublishingPlan.md`), and
+`BenchRunnerPlanAddendum.md` no longer treats upstream's files as fixed. The rest of this
+document is kept as the record of how the split was reasoned about until then.
+
+Earlier status: PR 1 is submitted upstream as benkirk#35 (open, awaiting review). PR 2 is
+still a proposal.
 
 Handoff note for a future session. It records the fork/upstream split decision while it is
 fresh, so the next session starts from a decision instead of re-deriving one.
