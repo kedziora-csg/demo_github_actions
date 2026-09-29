@@ -18,7 +18,14 @@ image and the GitHub Actions matrices that drive it.
 - `containers/devenv/Makefile` — copies `scripts/` into the build context as `extras/`.
 - `containers/{demo,test,publish}/` — small downstream images: demo app, test runner
   (OSU micro-benchmarks etc.), and the final publish/SBOM stage.
-- `containers/deploy/ncar-hpc/` — Apptainer/PBS deploy configs for NCAR clusters (Derecho/Casper).
+- `hpcrun/` — the HPC runner: `submit`/`validate`/`collect` on the login node, `runner.sh` in the
+  job, shell libraries in `lib/`, off-cluster tests in `tests/` (`make -C hpcrun test`).
+- `sites/` — machine descriptions (`sites/ncar.yaml`, `sites/ncar/<cluster>.yaml`) and each
+  cluster's generated `cluster.sh` and PBS entry points; `sites/ncar/legacy/` holds the old
+  OSU/FE scripts.
+- `sif/` — turns a published image into a digest-pinned `.sif` on a cluster login node.
+- Layout rationale: `BenchRunnerPlanAddendum.md` (phase 4.7). The factory (`containers/`,
+  `scripts/`) is planned to move to `NCAR/hpc-dev-container-factory` (`ImagePublishingPlan.md`).
 - `scripts/` — `build_*.sh` for real apps (WRF, CESM, ESMF, PETSc, DART, MPAS, Kokkos, …),
   `build_common.cfg` (sourced; sets `INSTALL_ROOT`, `STAGE_DIR`), and `hello_world.*` samples.
 - `.github/workflows/` — see CI section below.
