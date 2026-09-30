@@ -107,9 +107,10 @@ have `include:` build-args.)
   most PRs (including version bumps) are validated against.
 - `dial-an-image.yaml` — `workflow_dispatch` to build a single hand-picked variant; the
   fastest way to reproduce/iterate on one failing combination.
+- `app-image-builder-ghcr.yaml` — builds, publishes and smoke-tests the app images a
+  cluster's `images:` block names (`apps/`); dispatch with `-f cluster=derecho`.
 - Also: `container-build.yaml`, `conda-build.yaml`, `derived-containers.yaml`,
-  `matrix-smoketest-applications.yaml`, `trigger-workflows.yaml`, log-cleanup crons,
-  `mega-linter.yml`.
+  `trigger-workflows.yaml`, log-cleanup crons, `mega-linter.yml`.
 
 ## Conventions & gotchas
 
@@ -174,8 +175,16 @@ have `include:` build-args.)
 - **`report_cpu_features [binary]`** (`/container/bin/`, a base_os FILE-heredoc) is the tool
   for the above: it prints the host's SIMD level and, given an executable, the ISA it
   *requires* (`readelf -n` note + `objdump` scan for x86 `%zmm` / arm SVE `z*` regs). The
-  hello-world smoke tests (`devel`/`matrix-smoketest` workflows, `containers/test`) call it so
+  hello-world smoke tests (`devel` workflow, `containers/test`) call it so
   an over-built binary is visible *before* the SIGILL. Reusable for any executable.
+  Its "x86 ISA needed" line is only as good as the note: gcc writes a real level only
+  with `-mneeded`, so a `-march=znver3` build still reads `x86-64-baseline`. Count
+  `%ymm`/`vfmadd` in `objdump -d` to see what a gcc binary actually uses.
+- **A base image's ENTRYPOINT re-splits its arguments.** It is
+  `bash --rcfile /container/config_env.sh --login -c '${*}' --`, so
+  `docker run <img> bash -lc '<script>'` runs only the script's first word. Pass the
+  command as plain words (`docker run <img> /src/apps/smoke.sh hpcg 2 2`); the entrypoint
+  is already a login shell.
 - **CUDA 12.9 runfile installer runs its own host-gcc check** ("Failed to verify gcc
   version") that rejects gcc ≥15 — separate from nvcc, and *not* relaxed by the
   `-allow-unsupported-compiler` in `NVCC_PREPEND_FLAGS` (that only affects nvcc compiles).

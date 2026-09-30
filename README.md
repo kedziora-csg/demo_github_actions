@@ -93,7 +93,7 @@ The `.github/workflows/` directory contains the automation that drives image con
 - `matrix-build-images.yaml`
 - `devel-build-images.yaml`
 - `dial-an-image.yaml`
-- `matrix-smoketest-applications.yaml`
+- `app-image-builder-ghcr.yaml`, which builds the app images in `apps/`
 
 These will be discussed below.
 
@@ -483,7 +483,7 @@ It is the preferred tool for reproducing and debugging one failing combination w
 
 ### Additional Workflows
 
-Other workflows include `conda-build.yaml`, `derived-containers.yaml`, `matrix-smoketest-applications.yaml`, log-cleanup schedules, and `mega-linter.yml`.
+Other workflows include `conda-build.yaml`, `derived-containers.yaml`, log-cleanup schedules, and `mega-linter.yml`.
 
 ## Matrix Design Considerations
 
