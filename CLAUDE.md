@@ -24,6 +24,10 @@ image and the GitHub Actions matrices that drive it.
   cluster's generated `cluster.sh` and PBS entry points; `sites/ncar/legacy/` holds the old
   OSU/FE scripts.
 - `sif/` — turns a published image into a digest-pinned `.sif` on a cluster login node.
+- `apps/` — apps built on a published base image and published as app images: one
+  `apps/Dockerfile` (`ARG APP`), `apps/<app>/{build.sh,app.d/}`, `matrix.py` (a cluster's
+  `images:` block → the workflow's matrix) and `smoke.sh` (one run through the app contract).
+  Built by `app-image-builder-ghcr.yaml`; see `apps/README.md`.
 - Layout rationale: `BenchRunnerPlanAddendum.md` (phase 4.7). The factory (`containers/`,
   `scripts/`) is planned to move to `NCAR/hpc-dev-container-factory` (`ImagePublishingPlan.md`).
 - `scripts/` — `build_*.sh` for real apps (WRF, CESM, ESMF, PETSc, DART, MPAS, Kokkos, …),
