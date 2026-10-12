@@ -180,6 +180,9 @@ have `include:` build-args.)
   Its "x86 ISA needed" line is only as good as the note: gcc writes a real level only
   with `-mneeded`, so a `-march=znver3` build still reads `x86-64-baseline`. Count
   `%ymm`/`vfmadd` in `objdump -d` to see what a gcc binary actually uses.
+  Its AVX-512 answer is "is any `%zmm` named", which a oneAPI binary answers yes for
+  whenever it links Intel's run-time-dispatched SVML (`__svml_*_z0`). hpcrun's
+  `check_arch.sh` therefore asks which functions hold the `%zmm` before it refuses a job.
 - **A base image's ENTRYPOINT re-splits its arguments.** It is
   `bash --rcfile /container/config_env.sh --login -c '${*}' --`, so
   `docker run <img> bash -lc '<script>'` runs only the script's first word. Pass the
