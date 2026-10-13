@@ -22,7 +22,8 @@ image and the GitHub Actions matrices that drive it.
   job, shell libraries in `lib/`, off-cluster tests in `tests/` (`make -C hpcrun test`).
 - `sites/` — machine descriptions (`sites/ncar.yaml`, `sites/ncar/<cluster>.yaml`) and each
   cluster's generated `cluster.sh` and PBS entry points; `sites/ncar/legacy/` holds the old
-  OSU/FE scripts.
+  OSU/FE scripts. A new cluster: `hpcrun/clusterinit draft` then `probe-job`, then
+  `hpcrun/sitegen <cluster> --write` -- see `sites/README.md`, "Adding a cluster".
 - `sif/` — turns a published image into a digest-pinned `.sif` on a cluster login node.
 - `apps/` — apps built on a published base image and published as app images: one
   `apps/Dockerfile` (`ARG APP`), `apps/<app>/{build.sh,app.d/}`, `matrix.py` (a cluster's
